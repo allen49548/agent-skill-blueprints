@@ -4,6 +4,8 @@ Extract structured records from documents posted in channels, attribute them to 
 
 Onboarding is guided by `docs/onboarding-contract.md` at the repository root; use its quick-start preset if you are unsure.
 
+`build.py` at the repository root produces a standalone copy of this package into `dist/`. Read [docs/capability-matrix.md](../../docs/capability-matrix.md) to see which parts are implemented.
+
 ## Use when
 
 - Documents or screenshots arrive from multiple senders and duplicate submission is common.

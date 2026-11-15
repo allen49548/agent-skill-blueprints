@@ -92,3 +92,16 @@ The delivery standard changed from "readable specification" to "clone, interact 
 | 27 | Publication | New public repository `allen49548/agent-skill-blueprints` |
 
 Each package now ships `run.py`, an identical `engine.py`, `profile.json`, bundled `examples/demo_input.json` and an `engine` config section. Commands: `demo`, `setup`, `doctor`, `run`, `info`, `install`. `engine.py` implements local-folder / JSON / webhook inputs, CSV / JSON / XLSX outputs (including zip-level sheet insertion and surgical cell updates), stdout / webhook notifiers, all four notification templates, a business-key dedup ledger and a full run log.
+
+## Maturity refactor decisions (same session)
+
+A review against common open-source quality signals found that the first release optimised the first 30 seconds (clone and demo) rather than the 100th change. The following changes were made without further questions because they implement the review recommendations already agreed.
+
+| # | Decision | Change |
+| --- | --- | --- |
+| 28 | Documentation honesty | Added `docs/capability-matrix.md`; every `DESIGN.md` and `SKILL.md` now carries an implementation-status banner. Capability-specific mechanisms are labelled target design |
+| 29 | Single source of truth | `skillkit/engine.py` replaces four byte-identical `engine.py` copies; `run.py` files are shims; `build.py` generates standalone packages into gitignored `dist/` |
+| 30 | Invariants as tests | 22 standard-library unit tests and a Python 3.9-3.13 CI matrix; fixed the non-idempotent `_append_sheet` |
+| 31 | Project governance | `VERSION`, `CHANGELOG.md`, `SECURITY.md`, issue templates, `tools/check_repo.py`, structured run log, adapter registry validation, resolved LICENSE placeholder |
+
+Version 0.2.0. The six `run.py` commands are unchanged, so the fresh-clone workflow still works.

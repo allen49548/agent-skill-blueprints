@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: tests (python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Unit tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Demo in all four skills
+        run: |
+          for d in skills/*/; do
+            echo "== $d"
+            (cd "$d" && python3 run.py demo > /dev/null) || exit 1
+          done
+      - name: Build standalone packages
+        run: python3 build.py && python3 build.py --check
+
+  hygiene:
+    name: repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Encoding, privacy, JSON and structure gate
+        run: python3 tools/check_repo.py
+      - name: Python syntax
+        run: python3 -m compileall -q skillkit build.py tools tests skills

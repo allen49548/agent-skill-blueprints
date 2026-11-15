@@ -19,6 +19,8 @@ import argparse
 import csv
 import hashlib
 import json
+import logging
+import os
 import re
 import shutil
 import sys
@@ -29,7 +31,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from xml.sax.saxutils import escape
 
-HERE = Path(__file__).resolve().parent
+PACKAGE_DIR = Path(__file__).resolve().parent
+# When loaded from the repository, SKILLKIT_HOME points at the calling skill
+# directory. In a built self-contained package the engine sits in that same
+# directory, so the default falls back to PACKAGE_DIR. Both paths are correct.
+HERE = Path(os.environ.get("SKILLKIT_HOME") or PACKAGE_DIR).resolve()
 PROFILE_FILE = HERE / "profile.json"
 EXAMPLE_CONFIG = HERE / "config.example.json"
 CONFIG_FILE = HERE / "config.json"
@@ -38,6 +44,15 @@ INSTALL_ROOT = Path.home() / ".workbuddy" / "skills"
 
 PLACEHOLDER = re.compile(r"^<[A-Z0-9_]+>$")
 TEMPLATES = ["minimal", "compact_professional", "alert_only", "full_audit"]
+ADAPTERS = {
+    "input": ["local_folder", "json_file", "webhook"],
+    "output": ["csv", "json", "xlsx", "artifact_export", "none"],
+    "notify": ["stdout", "webhook", "none"],
+}
+
+LOG = logging.getLogger("skillkit")
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
+
 PRESET_CRONS = {
     "daily_0900": "0 9 * * *",
     "weekday_0900": "0 9 * * 1-5",
@@ -510,21 +525,55 @@ def _new_workbook(sheets: dict[str, list[list]]) -> bytes:
     return buf.getvalue()
 
 
+def _write_zip(path: Path, parts: dict[str, bytes]) -> None:
+    tmp = path.with_suffix(".tmp.xlsx")
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in parts.items():
+            z.writestr(name, data)
+    tmp.replace(path)
+
+
 def _append_sheet(existing: Path, sheet_name: str, rows: list[list], backup_dir: Path | None) -> str:
-    """Add one sheet to an existing workbook, leaving every other part byte-identical."""
+    """Add one sheet, or replace its content if the named sheet already exists.
+
+    Repeatable by construction: a rerun never creates a second sheet with the
+    same name and never duplicates the relationship or content-type entry.
+    """
     if backup_dir:
         backup_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(existing, backup_dir / (existing.name + "." + datetime.now().strftime("%Y%m%d%H%M%S") + ".bak"))
+        stamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        shutil.copy2(existing, backup_dir / (existing.name + "." + stamp + ".bak"))
     with zipfile.ZipFile(existing, "r") as z:
         parts = {i.filename: z.read(i.filename) for i in z.infolist()}
-    names = [n for n in parts if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", n)]
-    idx = max([int(re.search(r"(\d+)", n).group(1)) for n in names], default=0) + 1
     wb = parts.get("xl/workbook.xml", b"").decode("utf-8")
     rels = parts.get("xl/_rels/workbook.xml.rels", b"").decode("utf-8")
     ct = parts.get("[Content_Types].xml", b"").decode("utf-8")
+    safe = re.sub(r"[\\/*?:\[\]]", "_", sheet_name)[:31]
+
+    # Idempotent path: the named sheet already exists, so only replace its part.
+    for tag in re.findall(r"<sheet\b[^>]*/>", wb):
+        nm = re.search(r'\bname="([^"]*)"', tag)
+        rid_m = re.search(r'\br:id="(rId\d+)"', tag)
+        if not (nm and rid_m and nm.group(1) == safe):
+            continue
+        rid = rid_m.group(1)
+        rm = re.search(r'<Relationship\b[^>]*\bId="' + re.escape(rid)
+                       + r'"[^>]*\bTarget="([^"]+)"', rels)
+        if not rm:
+            continue
+        target = rm.group(1).lstrip("/")
+        part = target if target.startswith("xl/") else "xl/" + target
+        if part in parts:
+            parts[part] = _sheet_xml(rows).encode("utf-8")
+            _write_zip(existing, parts)
+            LOG.info("sheet replaced in place: %s", part)
+            return part
+
+    # First run: add a new worksheet part with a fresh rId and sheetId.
+    names = [n for n in parts if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", n)]
+    idx = max([int(re.search(r"(\d+)", n).group(1)) for n in names], default=0) + 1
     used = set(re.findall(r'Id="(rId\d+)"', rels))
     rid = next(f"rId{i}" for i in range(1, 999) if f"rId{i}" not in used)
-    safe = re.sub(r"[\\/*?:\[\]]", "_", sheet_name)[:31]
     sheet_id = max([int(x) for x in re.findall(r'sheetId="(\d+)"', wb)], default=0) + 1
     wb = wb.replace("</sheets>", f'<sheet name="{escape(safe)}" sheetId="{sheet_id}" r:id="{rid}"/></sheets>')
     rels = rels.replace("</Relationships>",
@@ -537,11 +586,8 @@ def _append_sheet(existing: Path, sheet_name: str, rows: list[list], backup_dir:
     parts["xl/_rels/workbook.xml.rels"] = rels.encode("utf-8")
     parts["[Content_Types].xml"] = ct.encode("utf-8")
     parts[f"xl/worksheets/sheet{idx}.xml"] = _sheet_xml(rows).encode("utf-8")
-    tmp = existing.with_suffix(".tmp.xlsx")
-    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
-        for name, data in parts.items():
-            z.writestr(name, data)
-    tmp.replace(existing)
+    _write_zip(existing, parts)
+    LOG.info("sheet added: sheet%d.xml", idx)
     return f"sheet{idx}.xml"
 
 
@@ -572,11 +618,7 @@ def _update_cells(existing: Path, rows: list[list], backup_dir: Path | None) -> 
             xml = xml[:m.start()] + m.group(1) + inner + m.group(3) + xml[m.end():]
             changed += 1
     parts[target] = xml.encode("utf-8")
-    tmp = existing.with_suffix(".tmp.xlsx")
-    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
-        for name, data in parts.items():
-            z.writestr(name, data)
-    tmp.replace(existing)
+    _write_zip(existing, parts)
     return changed
 
 
@@ -755,10 +797,16 @@ def run_pipeline(cfg: dict, profile: dict, out_dir: Path, dry_run: bool,
     }
     out_dir.mkdir(parents=True, exist_ok=True)
     save_json(out_dir / "run.json", report)
+    events = [
+        {"ts": now_iso(), "level": "INFO", "event": "run_complete",
+         "profile": report["profile"], "run_id": run_id, "read": len(raw),
+         "kept": len(kept), "duplicates": len(dupes), "dry_run": dry_run},
+        {"ts": now_iso(), "level": "INFO", "event": "writes", "detail": written},
+        {"ts": now_iso(), "level": "INFO", "event": "notifications", "detail": notices},
+    ] + [{"ts": now_iso(), "level": "WARNING", "event": "input_note", "detail": x} for x in errors]
     (out_dir / "run.log").write_text(
-        f"{now_iso()} profile={report['profile']} read={len(raw)} kept={len(kept)} "
-        f"dupes={len(dupes)} dry_run={dry_run} errors={len(errors)} writes={written} "
-        f"notifications={notices}\n", encoding="utf-8")
+        "\n".join(json.dumps(ev, ensure_ascii=False) for ev in events) + "\n",
+        encoding="utf-8")
     return report
 
 
@@ -894,6 +942,14 @@ def cmd_doctor(args) -> int:
     except Exception:
         say(f"  timezone           : {tz} INVALID")
         ok = False
+    for label, kind, value in (
+            ("input", "input", e.get("input", {}).get("adapter", "")),
+            ("output", "output", e.get("output", {}).get("adapter", "")),
+            ("notify", "notify", e.get("notify", {}).get("adapter", "stdout"))):
+        registered = value in ADAPTERS[kind]
+        say(f"  {label} adapter reg  : {value or 'unset'} -> {'registered' if registered else 'NOT REGISTERED'}")
+        if not registered:
+            ok = False
     nr = w.get("output", {}).get("new_report", {})
     if nr.get("enabled") and not (nr.get("authorized_by") and nr.get("never_overwrite_existing")):
         say("  new report         : enabled but authorization incomplete")
@@ -910,6 +966,16 @@ def cmd_info(args) -> int:
     return 0
 
 
+THIN_RUNPY = """#!/usr/bin/env python3
+# Generated entry point for a self-contained distributed skill.
+import sys
+from engine import main
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
+"""
+
+
 def cmd_install(args) -> int:
     profile = load_json(PROFILE_FILE, {})
     slug = profile.get("slug")
@@ -917,10 +983,9 @@ def cmd_install(args) -> int:
         die("profile.json has no slug")
     dest = INSTALL_ROOT / slug
     files = ["SKILL.md", "README.md", "DESIGN.md", "config.example.json",
-             "config.schema.md", "profile.json", "run.py", "engine.py"]
+             "config.schema.md", "profile.json"]
     say(f"Install target: {dest}")
-    for name in files:
-        say(f"  {name}")
+    say("  copies the shared engine so the installed skill runs standalone")
     if not args.apply:
         say("Dry run only. Re-run with --apply to write.")
         return 0
@@ -932,6 +997,8 @@ def cmd_install(args) -> int:
     ex = HERE / "examples"
     if ex.exists():
         shutil.copytree(ex, dest / "examples", dirs_exist_ok=True)
+    shutil.copy2(PACKAGE_DIR / "engine.py", dest / "engine.py")
+    (dest / "run.py").write_text(THIN_RUNPY, encoding="utf-8")
     say(f"Installed. Use it from {dest}")
     return 0
 

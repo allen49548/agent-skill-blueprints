@@ -4,6 +4,8 @@ Compute per-entity results from human-confirmed rules, prove them through an ind
 
 Onboarding is guided by `docs/onboarding-contract.md` at the repository root; use its quick-start preset if you are unsure.
 
+`build.py` at the repository root produces a standalone copy of this package into `dist/`. Read [docs/capability-matrix.md](../../docs/capability-matrix.md) to see which parts are implemented.
+
 ## Use when
 
 - A periodic allocation, quota, score or entitlement is high-stakes and rules differ per entity.

@@ -4,6 +4,8 @@ description: Specification for a two-capability pipeline that computes per-entit
 agent_created: true
 ---
 
+
+> **Implementation status: target design, not implemented.** This package currently runs the generic shared pipeline only. Independent recomputation, the eight verification classes, the approval gate and fingerprint binding described below do not exist in the runtime. See [docs/capability-matrix.md](../../docs/capability-matrix.md) before relying on any invariant here.
 # Verified Batch Calculation
 
 ## Purpose

@@ -4,6 +4,8 @@ Aggregate multiple sources into one period-keyed digest, always highlight one co
 
 Onboarding is guided by `docs/onboarding-contract.md` at the repository root; use its quick-start preset if you are unsure.
 
+`build.py` at the repository root produces a standalone copy of this package into `dist/`. Read [docs/capability-matrix.md](../../docs/capability-matrix.md) to see which parts are implemented.
+
 ## Use when
 
 - A recurring briefing, release-notes roundup, incident summary or event schedule must be sent on a schedule.

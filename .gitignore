@@ -16,6 +16,7 @@ out/
 output/
 demo-out/
 inbox/
+dist/
 run-logs/
 *.log
 *.sqlite

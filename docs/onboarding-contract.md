@@ -27,6 +27,24 @@ Each package implements this contract with a self-contained runtime (`run.py` + 
 
 `profile.json` declares which steps apply to that package and its default choices. Real platform connectors are adapter slots: the wizard can select `feishu` or `wecom`, list their groups and store exact identifiers, but the network call itself is supplied by the project. This keeps a fresh clone runnable for every user without per-user code changes.
 
+## Implementation status of these steps
+
+The wizard is real, but several steps collect a choice rather than perform an integration. Read [capability-matrix.md](capability-matrix.md) before assuming a step has a working backend.
+
+| Step | Status | What actually happens |
+| --- | --- | --- |
+| 0 preset | Implemented | Applies the `daily_intake` defaults |
+| 1 platform | Contract only | Stores `feishu` / `wecom` / `local_folder` as a config value. No vendor SDK is called |
+| 2 group multi-select | Contract only | Lists local inbox folders as groups. Real group listing needs a project adapter |
+| 3 message sources | Partial | Stores the selection. Only JSON/JSONL records are actually parsed; no OCR or template parser |
+| 4 output target | Implemented | Drives CSV, JSON and XLSX writers, including explicit new-report authorization |
+| 5 templates | Implemented | Four renderers and per-channel binding |
+| 6 schedule | Config only | Writes cron and timezone into config. No scheduler is installed |
+| 7 review | Implemented | Echoes every choice and requires confirmation |
+| 8 trial run | Implemented | `run` in dry-run produces a change log only |
+
+A step marked "Contract only" is a declared boundary and a config field, not a working integration. Projects supply the adapter; the runtime never guesses.
+
 ## The nine steps
 
 | Step | Question to the user | Config path | Boundary |

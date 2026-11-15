@@ -1,0 +1,44 @@
+# Changelog
+
+All notable changes to this project are documented here. The format follows Keep a Changelog and the project uses semantic versioning.
+
+Version numbers refer to the shared runtime and the repository as a whole. `config.example.json` carries its own `schema_version` and `wizard.schema_version`; a change to either requires a migration note here.
+
+## [0.2.0] - 2026-11-15
+
+Refactor release. The public API (the six `run.py` commands) is unchanged; the internal layout and the guarantee behind it changed.
+
+### Added
+
+- Single runtime source: `skillkit/engine.py`. The four skills now use thin `run.py` shims; no duplicated engine is committed.
+- `build.py` generates four standalone, individually distributable packages into gitignored `dist/`, with `BUILD_INFO.json` carrying the engine digest.
+- `tests/`: 22 standard-library unit tests covering business-key deduplication, group isolation, idempotent reruns, backup and byte-identical untouched parts, dry-run, XLSX writes, template field leakage, repository structure, all four demos, setup/doctor and standalone builds.
+- `.github/workflows/ci.yml`: Python 3.9-3.13 matrix running tests, four demos and build verification, plus a hygiene job.
+- `tools/check_repo.py`: encoding, privacy, JSON, structure and tracked-artifact gate.
+- `docs/capability-matrix.md`: explicit implemented / partial / contract-only / target-design status for every capability.
+- `VERSION`, `CHANGELOG.md`, `SECURITY.md`, issue templates.
+- Structured JSON-lines `run.log` and an adapter registry validated by `doctor`.
+- `skillkit.__version__` exposed programmatically.
+
+### Fixed
+
+- `_append_sheet` was not idempotent: every rerun created a new worksheet part, relationship and content-type override. It now replaces the named sheet in place. Covered by a test that reruns four times.
+- `doctor` previously printed adapter names without verifying them; it now rejects unregistered adapters.
+- `install --apply` now installs a self-contained copy rather than referencing a duplicated engine file.
+- LICENSE copyright placeholder resolved.
+
+### Changed
+
+- `CONTRIBUTING.md` no longer needs a rule to keep four engine copies byte-identical.
+- `DESIGN.md` files in all four packages now carry an implementation-status banner pointing at the capability matrix.
+- Documentation no longer implies that platform connectors, scheduled execution or per-skill verification logic are implemented.
+
+## [0.1.0] - 2026-11-15
+
+Initial public release.
+
+- Four capability blueprints with English-only, project-independent naming and design documents.
+- Shared nine-step onboarding contract and `wizard` config section.
+- Zero-dependency runnable runtime with demo, setup, doctor, run, info and install commands.
+- Built-in local-folder/JSON/webhook inputs, CSV/JSON/XLSX outputs, stdout/webhook notifiers and four notification templates.
+- Published as a public repository with a verified fresh-clone workflow.

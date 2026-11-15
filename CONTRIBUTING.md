@@ -13,11 +13,11 @@ These packages are runnable capability skills with a shared runtime and per-pack
 7. **One capability per package.** Do not merge packages or add a second unrelated capability.
 8. **Runtime is standard library only.** `engine.py` must not import third-party packages or vendor SDKs. Built-in adapters work with zero credentials; real platform connectors are registered, never hardcoded.
 9. **Onboarding choices are config, not prose.** Any new platform, group, message source, output mode, notification template or schedule preset belongs in `docs/onboarding-contract.md` and in the shared `wizard` section of every package. All four `wizard` structures must stay identical.
-10. **Keep the four runtimes identical.** `engine.py` and `run.py` are byte-identical across all packages; differences belong in `profile.json` and `config.example.json`.
+10. **One runtime, one source.** Never copy `skillkit/engine.py` into a skill directory. `run.py` stays a shim; standalone copies are produced by `build.py` into gitignored `dist/`.
 
 ## Adding a new package
 
-1. Create `skills/<capability-slug>/` with `SKILL.md`, `README.md`, `DESIGN.md`, `config.example.json`, `config.schema.md`, `profile.json`, `run.py`, `engine.py` (copy the shared runtime byte-for-byte) and `examples/demo_input.json`.
+1. Create `skills/<capability-slug>/` with `SKILL.md`, `README.md`, `DESIGN.md`, `config.example.json`, `config.schema.md`, `profile.json`, the standard `run.py` shim and `examples/demo_input.json`.
 2. Add a row to the catalog in the root `README.md`, including a "do NOT reach for it when" case.
 3. Add the old-to-new mapping and removed vocabulary to `docs/abstraction-map.md`.
 4. Introduce any new canonical term in `docs/vocabulary.md` first, then use it consistently.
@@ -46,7 +46,9 @@ The description must be trigger-oriented (what a user would ask for) and must st
 - [ ] `profile.json` declares defaults, applicable wizard steps and invariants.
 - [ ] `DESIGN.md` lists invariants, extension points and a failure matrix.
 - [ ] `README.md` lists both applicable and non-applicable scenarios and the four quick-start commands.
-- [ ] `engine.py` is byte-identical across all four packages.
-- [ ] `python3 run.py demo` succeeds in every package from a clean clone.
+- [ ] `python3 -m unittest discover -s tests -v` passes; new behaviour has a test.
+- [ ] `python3 tools/check_repo.py` passes.
+- [ ] `python3 build.py --check` passes.
+- [ ] `docs/capability-matrix.md` and `CHANGELOG.md` reflect any status change.
 - [ ] Privacy pre-flight from `PUBLISHING.md` passes.
 - [ ] Root catalog, abstraction map and onboarding contract are updated where needed.

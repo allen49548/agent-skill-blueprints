@@ -4,9 +4,9 @@ Run these commands in order. They create a local git repository in the generated
 
 The local directory is named `open-source-skills`; the remote repository is named `agent-skill-blueprints`. Git does not require them to match. If you prefer them identical, rename the directory before step 2 and adjust the path.
 
-**Published state (2026-11-15):** steps 5-10 have already been run. The repository is live at `git@github.com:allen49548/agent-skill-blueprints.git` (public). Use the 'Subsequent releases' section for new changes. The earlier steps document how it was created so the procedure is reproducible.
+**Published state (2026-11-15):** steps 5-10 have already been run, and version 0.2.0 has been released. The repository is live at `git@github.com:allen49548/agent-skill-blueprints.git` (public). Use the 'Subsequent releases' section for new changes. The earlier steps document how it was created so the procedure is reproducible.
 
-Review each command before running it, and replace `GITHUB_OWNER`, `COPYRIGHT_HOLDER` and `LOCAL_REPO` with your own values. `LICENSE` still carries the `<COPYRIGHT_HOLDER>` placeholder; set it before redistributing.
+Review each command before running it, and replace `GITHUB_OWNER`, `COPYRIGHT_HOLDER` and `LOCAL_REPO` with your own values. The LICENSE placeholder has been resolved; adjust the holder if you fork the project.
 
 ## 0. Set the placeholders
 
@@ -141,7 +141,8 @@ Do not use `git add -A`. Stage only the intended documentation paths.
 
 ```bash
 git add README.md LICENSE .gitignore CONTRIBUTING.md PUBLISHING.md
-git add docs/abstraction-map.md docs/vocabulary.md docs/onboarding-contract.md
+git add CHANGELOG.md SECURITY.md VERSION build.py
+git add docs/ tools/ tests/ .github/ skillkit/
 git add skills/scheduled-digest-publisher/
 git add skills/verified-batch-calculation/
 git add skills/message-to-workbook-sync/

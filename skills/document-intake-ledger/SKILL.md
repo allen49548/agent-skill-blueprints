@@ -4,6 +4,8 @@ description: Specification for extracting structured records from documents and 
 agent_created: true
 ---
 
+
+> **Implementation status: mixed.** The generic runtime (ingest, dedupe, write, notify) is implemented; most capability-specific mechanisms below are target design. See [docs/capability-matrix.md](../../docs/capability-matrix.md) before relying on any invariant here.
 # Document Intake Ledger
 
 ## Purpose

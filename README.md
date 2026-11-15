@@ -2,7 +2,7 @@
 
 Four **self-contained, runnable** capability skills. Clone the repo, run one command, answer a short wizard, and you are live. No dependencies, no credentials, no per-user code changes, no vendor SDKs.
 
-Python 3.9+ standard library only.
+Python 3.9+ standard library only. Current version: **0.2.0** ([changelog](CHANGELOG.md)).
 
 ## Quick start
 
@@ -19,6 +19,22 @@ python3 run.py run       # dry-run by default; --no-dry-run for real writes
 `demo` is the proof that it works: it reads bundled records, deduplicates them, writes XLSX / CSV / JSON, renders all four notification templates and leaves a run log under `demo-out/`. It needs no config file and no network access.
 
 `setup --yes` accepts the recommended preset without prompting. `python3 run.py install --apply` copies the skill into `~/.workbuddy/skills/<slug>/` so an agent can invoke it directly. Substitute any of the four package directory names above; they all work the same way.
+
+## Read this first: what actually runs
+
+The shared runtime is real, tested code. The four *capability-specific* mechanisms are **target designs**, not implementations. `profile.json` changes defaults, not algorithms. Check [docs/capability-matrix.md](docs/capability-matrix.md) before relying on any invariant.
+
+| Area | Status |
+| --- | --- |
+| demo / setup / doctor / run / info / install / build | Implemented and tested |
+| Local folder, JSON, webhook inputs; CSV, JSON, XLSX outputs | Implemented and tested |
+| Four notification templates; business-key dedup ledger | Implemented and tested |
+| Dry-run, backup, byte-identical verification | Implemented and tested |
+| Feishu / WeCom group listing and messaging | Contract only; a project-supplied adapter is required |
+| Installing a scheduled job | Config only; nothing schedules the run |
+| Independent recomputation and approval gate, OCR, semantic normalization, timezone ranking | Target design, **not implemented** |
+
+This is a working skeleton you extend, not four finished products. Saying so plainly is deliberate.
 
 ## Why there is no learning cost
 
@@ -59,6 +75,16 @@ Nine steps: preset or custom, platform, list-all-groups multi-select, message so
 
 Full contract: [docs/onboarding-contract.md](docs/onboarding-contract.md). Applicability differs per package; steps that do not apply are skipped with an explanation.
 
+## Development
+
+```bash
+python3 -m unittest discover -s tests -v   # 22 tests, standard library only
+python3 tools/check_repo.py                # encoding, privacy, JSON, structure gate
+python3 build.py && python3 build.py --check   # standalone packages in dist/
+```
+
+CI runs the tests, all four demos, the build and the hygiene gate on Python 3.9-3.13 for every push and pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) before changing the runtime: there is exactly one `skillkit/engine.py`, and the four `run.py` files are shims. To ship a single skill elsewhere, run `build.py` and copy `dist/<slug>/`.
+
 ## Design principles
 
 1. **Name the mechanism, not the domain.** No business roles, brands or project names in identifiers or concepts.
@@ -76,36 +102,44 @@ Canonical vocabulary: `entity`, `channel`, `workbook`, `approver`, `recipient`, 
 
 ```
 agent-skill-blueprints/
-|-- README.md  LICENSE  .gitignore  CONTRIBUTING.md  PUBLISHING.md
+|-- README.md  LICENSE  CHANGELOG.md  SECURITY.md  VERSION
+|-- CONTRIBUTING.md  PUBLISHING.md  .gitignore
+|-- build.py                     generates standalone packages into dist/
+|-- skillkit/
+|   |-- __init__.py              __version__
+|   `-- engine.py                the single runtime source
+|-- tools/check_repo.py          hygiene gate
+|-- tests/                       standard-library unittest suite
+|-- .github/workflows/ci.yml      test matrix + hygiene
+|-- .github/ISSUE_TEMPLATE/
 |-- docs/
-|   |-- abstraction-map.md       old-to-new mapping and decision log
-|   |-- onboarding-contract.md   shared wizard and boundary conditions
-|   `-- vocabulary.md            canonical terms and invariants glossary
+|   |-- capability-matrix.md     implemented vs target design (read first)
+|   |-- onboarding-contract.md   shared wizard and boundaries
+|   |-- abstraction-map.md       naming history and decision log
+|   `-- vocabulary.md
 `-- skills/<slug>/
-    |-- run.py                   entry point (identical in all four)
-    |-- engine.py                stdlib-only runtime (identical in all four)
+    |-- run.py                   thin shim (identical in all four)
     |-- profile.json             per-skill defaults and wizard applicability
-    |-- SKILL.md                 agent-facing contract
-    |-- README.md                quick start and use cases
-    |-- DESIGN.md                concepts, state machine, invariants, extension points
-    |-- config.example.json      full documented config template
-    |-- config.schema.md         field-by-field configuration contract
-    `-- examples/demo_input.json bundled sample data
+    |-- SKILL.md  README.md  DESIGN.md
+    |-- config.example.json  config.schema.md
+    `-- examples/demo_input.json
 ```
 
-`config.json`, `inbox/`, `out/`, `demo-out/` and `state/` are generated locally and gitignored.
+`config.json`, `inbox/`, `out/`, `demo-out/`, `state/` and `dist/` are generated locally and gitignored.
 
 ## What is deliberately absent
 
-- Vendor SDK bindings and real platform API calls. They are adapter slots; the built-in adapters need no credentials.
+- Real platform API calls. `feishu` and `wecom` are config option values; the network call is an adapter slot.
+- Automatic scheduling. `setup` records a cron expression and timezone, but no scheduler is installed.
+- The four capability-specific mechanisms. See the matrix above and `docs/capability-matrix.md`.
 - Real names, account/chat identifiers, absolute machine paths, amounts, screenshots and database state.
-- Domain-specific reward, penalty, ranking or wording policies. These belong in configurable policy hooks.
-- Third-party marketplace skills and author-side maintenance tooling. See [docs/abstraction-map.md](docs/abstraction-map.md).
+- Domain-specific reward, penalty, ranking or wording policies.
+- Third-party marketplace skills and author-side maintenance tooling.
 
 ## Release checklist
 
-Before any public push, run the privacy pre-flight in [PUBLISHING.md](PUBLISHING.md). It scans for identifiers, local paths, credentials and non-ASCII personal names.
+Before any public push, run `python3 tools/check_repo.py` and `python3 -m unittest discover -s tests`. Both are also enforced in CI. If implementation status changed, update `docs/capability-matrix.md` and `CHANGELOG.md` in the same pull request. The longer publishing and privacy pre-flight procedure is in [PUBLISHING.md](PUBLISHING.md).
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Set `<COPYRIGHT_HOLDER>` to your own name before redistributing.
+MIT. See [LICENSE](LICENSE).

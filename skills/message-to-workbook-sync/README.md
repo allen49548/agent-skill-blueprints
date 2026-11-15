@@ -4,6 +4,8 @@ Parse semi-structured channel messages in multiple formats and write normalized 
 
 Onboarding is guided by `docs/onboarding-contract.md` at the repository root; use its quick-start preset if you are unsure.
 
+`build.py` at the repository root produces a standalone copy of this package into `dist/`. Read [docs/capability-matrix.md](../../docs/capability-matrix.md) to see which parts are implemented.
+
 ## Use when
 
 - Records arrive as text templates or rendered cards and must land in an existing workbook.
