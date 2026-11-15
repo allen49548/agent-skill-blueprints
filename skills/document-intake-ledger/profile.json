@@ -1,0 +1,29 @@
+{
+  "slug": "document-intake-ledger",
+  "capability": "Extract records from documents, attribute them to a sender, deduplicate through a ledger and append rows to a report",
+  "defaults": {
+    "message_sources": ["image", "file"],
+    "output_adapter": "xlsx",
+    "output_mode": "existing_report",
+    "write_mode": "new_sheet",
+    "templates": ["minimal", "compact_professional"],
+    "schedule_preset": "daily_0900",
+    "timezone": "UTC"
+  },
+  "wizard_steps": {
+    "platform": true,
+    "group_discovery": true,
+    "message_sources": true,
+    "output": true,
+    "notifications": true,
+    "schedule": true,
+    "review": true,
+    "trial_run": true
+  },
+  "invariants": [
+    "business key, never equal value, defines a duplicate",
+    "record_without_write when the target workbook is missing",
+    "append-only writes with backup, verification and rollback",
+    "per-group isolation in statistics and notifications"
+  ]
+}

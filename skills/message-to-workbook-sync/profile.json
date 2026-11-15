@@ -1,0 +1,36 @@
+{
+  "slug": "message-to-workbook-sync",
+  "capability": "Parse semi-structured messages and write normalized values into existing workbooks at cell level",
+  "defaults": {
+    "message_sources": [
+      "text",
+      "template_message",
+      "card"
+    ],
+    "output_adapter": "xlsx",
+    "output_mode": "existing_report",
+    "write_mode": "existing_cells",
+    "templates": [
+      "minimal",
+      "compact_professional"
+    ],
+    "schedule_preset": "daily_three_rounds",
+    "timezone": "UTC"
+  },
+  "wizard_steps": {
+    "platform": true,
+    "group_discovery": true,
+    "message_sources": true,
+    "output": true,
+    "notifications": true,
+    "schedule": true,
+    "review": true,
+    "trial_run": true
+  },
+  "invariants": [
+    "cell-level surgical writes only",
+    "backup before every write",
+    "corrections belong to the stated business period",
+    "groups never merged"
+  ]
+}

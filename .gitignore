@@ -1,0 +1,46 @@
+# Local configuration and credentials
+config.json
+config.local.json
+*.local.json
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+*.key
+*.pem
+
+# Runtime state and generated output
+state/
+out/
+output/
+demo-out/
+inbox/
+run-logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+backups/
+*.bak
+
+# Downloaded or generated binary material
+assets/downloads/
+assets/images/
+*.png
+*.jpg
+*.jpeg
+*.xlsx
+*.xls
+*.zip
+*.tar.gz
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+__pycache__/
+*.pyc

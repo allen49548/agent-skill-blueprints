@@ -1,0 +1,226 @@
+{
+  "schema_version": 1,
+  "period": {
+    "id_format": "YYYY-MM",
+    "derivation": "system_clock",
+    "schedule_cron": "0 9 10 * *",
+    "schedule_timezone": "<SCHEDULE_TIMEZONE>",
+    "scheduled_run_stops_at": "preview"
+  },
+  "registry": {
+    "adapter": "<REGISTRY_ADAPTER_ID>",
+    "source": "<REGISTRY_ENDPOINT>",
+    "cache_path": "./state/registry.json",
+    "alias_map": {},
+    "elastic": true,
+    "exclude_identities": ["service_account", "owner"]
+  },
+  "record_sources": [
+    {
+      "id": "primary-records",
+      "type": "table",
+      "location": "<RECORD_SOURCE_LOCATION>",
+      "field_map": "<FIELD_MAP_FILE>",
+      "enabled": true
+    },
+    {
+      "id": "adjustments",
+      "type": "table",
+      "location": "<ADJUSTMENT_SOURCE_LOCATION>",
+      "field_map": "<ADJUSTMENT_FIELD_MAP_FILE>",
+      "enabled": false
+    }
+  ],
+  "transcription": {
+    "enabled": false,
+    "adapter": "<TRANSCRIBER_ADAPTER_ID>",
+    "low_confidence_action": "manual_review",
+    "confidence_threshold": 0.9
+  },
+  "rules": {
+    "path": "<RULES_FILE>",
+    "candidates_path": "./state/rules.candidates.json",
+    "require_human_confirmation": true,
+    "allow_arbitrary_expressions": false,
+    "allowed_operators": ["add", "subtract", "multiply", "divide", "min", "max", "compare", "lookup"]
+  },
+  "precision": {
+    "scale": 2,
+    "rounding": "half_up",
+    "round_per_row_before_sum": true
+  },
+  "verification": {
+    "independent_recompute": true,
+    "classes": {
+      "input_completeness": "blocking",
+      "reconciliation": "blocking",
+      "rule_compliance": "blocking",
+      "inclusion_exclusion": "blocking",
+      "period_anomaly": "advisory",
+      "external_reference": "disabled",
+      "arithmetic_precision": "blocking",
+      "delivery_eligibility": "blocking"
+    },
+    "anomaly_threshold_percent": 30,
+    "external_reference_source": "<OPTIONAL_REFERENCE_LOCATION>"
+  },
+  "approval": {
+    "token_source": "approver_supplied",
+    "bind_to_fingerprint": true,
+    "expiry_hours": 24,
+    "require_explicit_review_acceptance": true,
+    "agent_may_confirm": false
+  },
+  "delivery": {
+    "adapter": "<DELIVERY_ADAPTER_ID>",
+    "channel": "<DELIVERY_CHANNEL_TYPE>",
+    "dry_run": true,
+    "allowlist": [
+      {
+        "entity_id": "<ENTITY_ID>",
+        "recipient_id": "<RECIPIENT_ID>",
+        "enabled": false
+      }
+    ],
+    "one_message_per_recipient": true,
+    "group_fallback": false,
+    "idempotency_key_template": "result:{period}:{entity_id}:{fingerprint}"
+  },
+  "output": {
+    "root": "./out",
+    "artifacts": ["row_detail.json", "summary.json", "verification.json", "verification.md", "preview.json", "results/"]
+  },
+  "style": {
+    "template": "<OPTIONAL_STYLE_TEMPLATE>"
+  },
+  "wizard": {
+    "schema_version": 1,
+    "mode": "guided",
+    "preset": "custom",
+    "preset_options": [
+      "daily_intake",
+      "custom"
+    ],
+    "connector": {
+      "platform": "feishu",
+      "platform_options": [
+        "feishu",
+        "wecom"
+      ],
+      "connection_status": "disconnected",
+      "group_discovery": "list_all",
+      "group_selection": "multi",
+      "selected_group_ids": [],
+      "group_isolation": "per_group",
+      "match_by": "exact_id"
+    },
+    "message_sources": [
+      "file",
+      "structured_record"
+    ],
+    "message_source_options": [
+      "image",
+      "text",
+      "link",
+      "template_message",
+      "card",
+      "file",
+      "feed",
+      "api",
+      "structured_record"
+    ],
+    "output": {
+      "mode": "artifact_export",
+      "mode_options": [
+        "existing_report",
+        "new_report",
+        "message_only",
+        "artifact_export"
+      ],
+      "existing_report": {
+        "write_mode": "new_sheet",
+        "write_mode_options": [
+          "existing_cells",
+          "new_sheet"
+        ],
+        "sheet": "<SHEET_NAME>",
+        "create_workbook_if_missing": false
+      },
+      "new_report": {
+        "enabled": false,
+        "requires_explicit_authorization": true,
+        "authorized_by": null,
+        "template": "<REPORT_TEMPLATE>",
+        "target_dir": "<REPORT_DIR>",
+        "backup_required": true,
+        "never_overwrite_existing": true
+      }
+    },
+    "notifications": {
+      "template_catalog": [
+        "minimal",
+        "compact_professional",
+        "alert_only",
+        "full_audit"
+      ],
+      "selected_templates": [
+        "compact_professional",
+        "alert_only"
+      ],
+      "channel_binding": {
+        "public_channel": null,
+        "operator_channel": "compact_professional"
+      },
+      "delivery_whitelist": []
+    },
+    "schedule": {
+      "preset": "monthly_10",
+      "preset_options": [
+        "daily_0900",
+        "weekday_0900",
+        "daily_three_rounds",
+        "monthly_1_4",
+        "monthly_10",
+        "hourly",
+        "custom"
+      ],
+      "cron": "0 9 10 * *",
+      "timezone": "<TIMEZONE>",
+      "user_confirmed": false,
+      "custom_cron_allowed": true
+    },
+    "confirmation": {
+      "review_all_choices": true,
+      "dry_run": true,
+      "trial_run_writes_disabled": true,
+      "user_confirmed": false
+    }
+  },
+  "engine": {
+    "input": {
+      "adapter": "local_folder",
+      "path": "./inbox"
+    },
+    "output": {
+      "adapter": "artifact_export",
+      "mode": "artifact_export",
+      "write_mode": "new_sheet",
+      "path": "./out/report.xlsx",
+      "sheet": "detail",
+      "anchor": "A1",
+      "csv_path": "./out/report.csv",
+      "json_path": "./out/report.json"
+    },
+    "notify": {
+      "adapter": "stdout",
+      "webhook_url": ""
+    },
+    "dedupe": {
+      "key_fields": [
+        "business_key"
+      ],
+      "ledger_path": "./state/ledger.json"
+    },
+    "timezone": "UTC"
+  }
+}

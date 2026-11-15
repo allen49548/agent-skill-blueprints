@@ -1,0 +1,35 @@
+{
+  "slug": "verified-batch-calculation",
+  "capability": "Compute per-entity results from confirmed rules, verify independently, then deliver behind an approval gate",
+  "defaults": {
+    "message_sources": [
+      "file",
+      "structured_record"
+    ],
+    "output_adapter": "artifact_export",
+    "output_mode": "artifact_export",
+    "write_mode": "new_sheet",
+    "templates": [
+      "compact_professional",
+      "alert_only"
+    ],
+    "schedule_preset": "monthly_10",
+    "timezone": "UTC"
+  },
+  "wizard_steps": {
+    "platform": true,
+    "group_discovery": false,
+    "message_sources": true,
+    "output": true,
+    "notifications": true,
+    "schedule": true,
+    "review": true,
+    "trial_run": true
+  },
+  "invariants": [
+    "exactly two business capabilities: compute and verify",
+    "unconfirmed rules block delivery",
+    "confirmation bound to a fingerprint",
+    "one recipient per message"
+  ]
+}

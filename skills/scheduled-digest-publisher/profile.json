@@ -1,0 +1,36 @@
+{
+  "slug": "scheduled-digest-publisher",
+  "capability": "Aggregate sources into a period-keyed digest, highlight a focus entity, normalize timezones and deliver once",
+  "defaults": {
+    "message_sources": [
+      "feed",
+      "api",
+      "text",
+      "link"
+    ],
+    "output_adapter": "none",
+    "output_mode": "message_only",
+    "write_mode": "new_sheet",
+    "templates": [
+      "minimal"
+    ],
+    "schedule_preset": "daily_0900",
+    "timezone": "UTC"
+  },
+  "wizard_steps": {
+    "platform": true,
+    "group_discovery": false,
+    "message_sources": true,
+    "output": true,
+    "notifications": true,
+    "schedule": true,
+    "review": true,
+    "trial_run": true
+  },
+  "invariants": [
+    "one message per period per channel",
+    "focus section never omitted",
+    "no unverified facts",
+    "degradation is always recorded"
+  ]
+}

@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "channels": {
+    "reader_adapter": "<CHANNEL_READER_ADAPTER_ID>",
+    "read_allowlist": [
+      { "channel_id": "<SOURCE_CHANNEL_ID>", "group": "<GROUP_ID>" }
+    ],
+    "read_identity": "<READ_IDENTITY>",
+    "window_lookback_periods": 1
+  },
+  "workbooks": {
+    "root": "<WORKBOOK_DIR>",
+    "file_pattern": "{entity}.xlsx",
+    "sheet_pattern": "{business_period}",
+    "row_key": "period_serial",
+    "target_cells": {
+      "metric_a": "B",
+      "metric_b": "C",
+      "metric_c": "D",
+      "metric_d": "E",
+      "metric_e": "F"
+    },
+    "protected_regions": ["formula_rows", "summary_region", "notes_columns"],
+    "create_if_missing": false
+  },
+  "formats": [
+    {
+      "id": "labeled_text",
+      "parser": "<LABELED_TEXT_PARSER_ID>",
+      "multi_record_boundary_field": "entity",
+      "enabled": true
+    },
+    {
+      "id": "rendered_card",
+      "parser": "<RENDERED_CARD_PARSER_ID>",
+      "detection": "structured_labels",
+      "enabled": true
+    }
+  ],
+  "field_map": {
+    "metric_a": { "canonical": "metric_a", "target_cell": "B" },
+    "metric_b": { "canonical": "metric_b", "target_cell": "C" },
+    "metric_c": { "canonical": "metric_c", "target_cell": "D" },
+    "metric_d": { "canonical": "metric_d", "target_cell": "E" },
+    "metric_e": { "canonical": "metric_e", "target_cell": "F" }
+  },
+  "alias_map": {
+    "count_a": "metric_a",
+    "total_a": "metric_a",
+    "count_b": "metric_b",
+    "items_a": "metric_e"
+  },
+  "canonical_field_names": ["metric_a", "metric_b", "metric_c", "metric_d", "metric_e"],
+  "ignored_fields": ["target_hint", "remaining_hint"],
+  "normalization": {
+    "unify_punctuation": true,
+    "strip_units": true,
+    "glued_value_split": "longest_prefix",
+    "empty_value_policy": "zero",
+    "ambiguous_value_action": "skip_and_escalate",
+    "date_formats": ["YYYY.MM.DD", "YYYY-MM-DD", "YYYY/MM/DD"]
+  },
+  "ownership": {
+    "entity_to_group": {
+      "<ENTITY_ID_A>": "<GROUP_ID_A>",
+      "<ENTITY_ID_B>": "<GROUP_ID_B>"
+    },
+    "precedence": ["entity_to_group", "record_field", "source_channel"],
+    "unresolved_action": "manual_review",
+    "allow_default_group": false
+  },
+  "deduplication": {
+    "key_fields": ["business_period", "entity", "group"],
+    "same_key_strategy": "latest_by_source_timestamp",
+    "write_decision": "compare_current_cell_value"
+  },
+  "rounds": [
+    { "id": 1, "hour": 22, "business_period_offset_days": 0, "role": "backfill" },
+    { "id": 2, "hour": 23, "business_period_offset_days": 0, "role": "backfill" },
+    { "id": 3, "hour": 0, "business_period_offset_days": -1, "role": "finalize" }
+  ],
+  "absence_marker": {
+    "enabled": true,
+    "apply_on_round": "finalize",
+    "target_range": "A:F",
+    "style": "<MARKER_STYLE_ID>",
+    "clear_before_late_write": true
+  },
+  "aggregation": {
+    "metrics": ["metric_a", "metric_b"],
+    "scope": "per_group",
+    "allow_cross_group_merge": false,
+    "expose_entity_values": false
+  },
+  "policy_hooks": [
+    {
+      "id": "optional-summary-commentary",
+      "adapter": "<POLICY_HOOK_ADAPTER_ID>",
+      "enabled": false
+    }
+  ],
+  "notifications": {
+    "adapter": "<NOTIFICATION_ADAPTER_ID>",
+    "delivery_enabled": false,
+    "tiers": {
+      "run_summary": { "channel_id": "<SUMMARY_CHANNEL_ID>", "enabled": true },
+      "anomaly_escalation": { "channel_id": "<SOURCE_CHANNEL_ID>", "enabled": true },
+      "final_aggregation": { "channel_id": "<GROUP_CHANNEL_ID>", "enabled": true },
+      "operational_detail": { "channel_id": "<PRIVATE_CHANNEL_ID>", "enabled": true }
+    },
+    "idempotency_key_template": "sync:{period}:{round}:{tier}:{channel_id}"
+  },
+  "output": {
+    "root": "./output",
+    "backup_dir": "./output/<business_period>/backups",
+    "change_log": "./output/<business_period>/change-log.md",
+    "state_file": "./output/<business_period>/state.json"
+  },
+  "safety": {
+    "write_enabled": false,
+    "backup_required": true,
+    "verify_untouched_parts": true,
+    "rollback_on_verify_failure": true
+  },
+  "wizard": {
+    "schema_version": 1,
+    "mode": "guided",
+    "preset": "daily_intake",
+    "preset_options": [
+      "daily_intake",
+      "custom"
+    ],
+    "connector": {
+      "platform": "feishu",
+      "platform_options": [
+        "feishu",
+        "wecom"
+      ],
+      "connection_status": "disconnected",
+      "group_discovery": "list_all",
+      "group_selection": "multi",
+      "selected_group_ids": [],
+      "group_isolation": "per_group",
+      "match_by": "exact_id"
+    },
+    "message_sources": [
+      "text",
+      "template_message",
+      "card"
+    ],
+    "message_source_options": [
+      "image",
+      "text",
+      "link",
+      "template_message",
+      "card",
+      "file",
+      "feed",
+      "api",
+      "structured_record"
+    ],
+    "output": {
+      "mode": "existing_report",
+      "mode_options": [
+        "existing_report",
+        "new_report",
+        "message_only",
+        "artifact_export"
+      ],
+      "existing_report": {
+        "write_mode": "existing_cells",
+        "write_mode_options": [
+          "existing_cells",
+          "new_sheet"
+        ],
+        "sheet": "<SHEET_NAME>",
+        "create_workbook_if_missing": false
+      },
+      "new_report": {
+        "enabled": false,
+        "requires_explicit_authorization": true,
+        "authorized_by": null,
+        "template": "<REPORT_TEMPLATE>",
+        "target_dir": "<REPORT_DIR>",
+        "backup_required": true,
+        "never_overwrite_existing": true
+      }
+    },
+    "notifications": {
+      "template_catalog": [
+        "minimal",
+        "compact_professional",
+        "alert_only",
+        "full_audit"
+      ],
+      "selected_templates": [
+        "minimal",
+        "compact_professional"
+      ],
+      "channel_binding": {
+        "public_channel": "minimal",
+        "operator_channel": "compact_professional"
+      },
+      "delivery_whitelist": []
+    },
+    "schedule": {
+      "preset": "daily_three_rounds",
+      "preset_options": [
+        "daily_0900",
+        "weekday_0900",
+        "daily_three_rounds",
+        "monthly_1_4",
+        "monthly_10",
+        "hourly",
+        "custom"
+      ],
+      "cron": "0 22,23,0 * * *",
+      "timezone": "<TIMEZONE>",
+      "user_confirmed": false,
+      "custom_cron_allowed": true
+    },
+    "confirmation": {
+      "review_all_choices": true,
+      "dry_run": true,
+      "trial_run_writes_disabled": true,
+      "user_confirmed": false
+    }
+  },
+  "engine": {
+    "input": {
+      "adapter": "local_folder",
+      "path": "./inbox"
+    },
+    "output": {
+      "adapter": "xlsx",
+      "mode": "existing_report",
+      "write_mode": "existing_cells",
+      "path": "./out/report.xlsx",
+      "sheet": "detail",
+      "anchor": "A1",
+      "csv_path": "./out/report.csv",
+      "json_path": "./out/report.json"
+    },
+    "notify": {
+      "adapter": "stdout",
+      "webhook_url": ""
+    },
+    "dedupe": {
+      "key_fields": [
+        "business_key"
+      ],
+      "ledger_path": "./state/ledger.json"
+    },
+    "timezone": "UTC"
+  }
+}

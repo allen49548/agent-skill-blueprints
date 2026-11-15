@@ -1,0 +1,343 @@
+{
+  "schema_version": 1,
+  "period": {
+    "derivation": "system_clock",
+    "schedule_cron": "0 9 * * *",
+    "schedule_timezone": "<SCHEDULE_TIMEZONE>",
+    "monthly_report_cron": "0 9 1-4 * *"
+  },
+  "channels": {
+    "reader_adapter": "<CHANNEL_READER_ADAPTER_ID>",
+    "primary": [
+      { "channel_id": "<PRIMARY_CHANNEL_ID>", "read": true, "notify": true }
+    ],
+    "retired": [
+      { "channel_id": "<RETIRED_CHANNEL_ID>", "read": false, "notify": false }
+    ],
+    "lookback_periods": 14,
+    "send_identity": "<SEND_IDENTITY>"
+  },
+  "document_classes": {
+    "accepted": ["structured_evidence"],
+    "unsupported": ["unstructured_or_handwritten"],
+    "ignored": ["text_only_claim", "non_document_image"],
+    "manual_review_triggers": ["low_confidence", "missing_timestamp", "altered_document", "unresolved_sender"],
+    "confidence_threshold": 0.9
+  },
+  "attribution": {
+    "entity_map": {
+      "<SENDER_ID_A>": "<ENTITY_ID_A>",
+      "<SENDER_ID_B>": "<ENTITY_ID_B>"
+    },
+    "elastic": true,
+    "allow_new_entity_from_valid_sender": true,
+    "conflict_action": "manual_review",
+    "unresolved_action": "manual_review",
+    "excluded_identities": ["service_account", "owner"]
+  },
+  "dedup": {
+    "layers": ["message_id", "content_hash", "perceptual_hash", "business_key"],
+    "business_key_fields": ["document_business_id", "timestamp"],
+    "fallback_business_key_fields": ["entity", "period", "value", "class", "content_hash"],
+    "equal_value_is_duplicate": false,
+    "perceptual_hit_with_different_key": "false_positive",
+    "include_entity_in_composite_key": true,
+    "report_original_registration": true,
+    "retain_original_message_id": true
+  },
+  "workbooks": {
+    "root": "<WORKBOOK_DIR>",
+    "file_pattern": "{entity}{period}.xlsx",
+    "detail_sheet": "detail",
+    "create_sheet_in_existing_workbook": true,
+    "create_workbook_if_missing": false,
+    "write_original_summary_cells": false,
+    "append_only": true
+  },
+  "ledger": {
+    "path": "./state/ledger.sqlite",
+    "states": ["confirmed", "registered", "needs_material", "duplicate", "voided"],
+    "outstanding_states": ["registered"],
+    "physical_delete": false
+  },
+  "tasks": {
+    "adapter": "<TASK_ADAPTER_ID>",
+    "batching": "entity_per_run",
+    "editor_role": "<EDITOR_IDENTITY>",
+    "viewer_role": "submitter",
+    "deadline_periods": 3,
+    "poll_completion": true,
+    "completion_acknowledgement": true,
+    "missing_viewer_action": "skip_silently_and_log"
+  },
+  "notifications": {
+    "adapter": "<NOTIFICATION_ADAPTER_ID>",
+    "delivery_enabled": false,
+    "tiers": {
+      "channel_overview": { "channel_id": "<PRIMARY_CHANNEL_ID>", "enabled": true },
+      "operator_detail": { "channel_id": "<PRIVATE_CHANNEL_ID>", "enabled": true }
+    },
+    "per_entity_private_delivery": false,
+    "hard_block_private_delivery_flag": true,
+    "send_on_no_change": true,
+    "idempotency_key_template": "intake:{period}:{run_id}:{tier}:{channel_id}"
+  },
+  "aggregation": {
+    "group_by": "entity",
+    "include_channel_allowlist": false,
+    "active_entities_only": true,
+    "period_source_priority": ["document_timestamp", "fallback_timestamp", "registration_timestamp"],
+    "comparison_visibility": "operator_detail_only",
+    "period_send_guard": true
+  },
+  "policy_hooks": [
+    {
+      "id": "optional-tone",
+      "adapter": "<TONE_HOOK_ADAPTER_ID>",
+      "enabled": false
+    }
+  ],
+  "adapters": {
+    "schema_version": 1,
+    "resolution": "declarative",
+    "input": {
+      "source": {
+        "type": "channel_messages",
+        "adapter_ref": "channels.reader_adapter",
+        "allowlist_ref": "channels.primary",
+        "retired_ref": "channels.retired",
+        "alternatives": ["local_directory", "http_api", "message_queue"]
+      },
+      "client": {
+        "adapter": "<CLIENT_ADAPTER_ID>",
+        "identity": "<READ_IDENTITY>",
+        "download_attachments": true,
+        "attachment_dir": "./output/attachments",
+        "page_all": true,
+        "order": "asc",
+        "identity_fallback": "none",
+        "alternatives": ["sdk", "http_api"]
+      },
+      "documents": {
+        "accepted_ref": "document_classes.accepted",
+        "unsupported_ref": "document_classes.unsupported",
+        "ignored_ref": "document_classes.ignored",
+        "confidence_ref": "document_classes.confidence_threshold",
+        "manual_review_ref": "document_classes.manual_review_triggers",
+        "extractor": "<EXTRACTOR_ADAPTER_ID>",
+        "supported_shapes": ["image", "pdf", "structured_json"],
+        "alternatives": ["vision_only", "structured_only"]
+      },
+      "window": {
+        "strategy": "lookback",
+        "lookback_ref": "channels.lookback_periods",
+        "clock": "system_clock",
+        "incremental": false,
+        "full_rescan_each_run": true,
+        "skip": ["system_message", "recalled_message"],
+        "period_field_priority_ref": "aggregation.period_source_priority",
+        "alternatives": ["incremental_cursor", "webhook_events"]
+      }
+    },
+    "output": {
+      "write": {
+        "type": "workbook_detail_sheet",
+        "adapter": "<DETAIL_SHEET_WRITER_ADAPTER_ID>",
+        "target_ref": "workbooks",
+        "safety_ref": "safety",
+        "idempotency_key": "message_id",
+        "alternatives": ["csv", "database", "none"]
+      },
+      "notifications": {
+        "adapter_ref": "notifications.adapter",
+        "channels_ref": "notifications.tiers",
+        "send_on_no_change_ref": "notifications.send_on_no_change",
+        "idempotency_key_ref": "notifications.idempotency_key_template",
+        "channels": [
+          {
+            "id": "channel_overview",
+            "type": "channel",
+            "renderer": "<OVERVIEW_RENDERER_ID>",
+            "format": "minimal",
+            "fields_visible": ["value", "document_dates", "submitter_mention", "task_url"],
+            "fields_hidden": ["ledger_states", "outstanding", "comparison", "record_count", "business_key", "file_names", "paths"]
+          },
+          {
+            "id": "operator_detail",
+            "type": "direct_message",
+            "renderer": "<DETAIL_RENDERER_ID>",
+            "format": "compact_professional",
+            "fields_visible": ["all_operational_fields"]
+          },
+          {
+            "id": "per_entity_private",
+            "type": "direct_message",
+            "enabled": false,
+            "hard_blocked": true
+          }
+        ],
+        "alternatives": ["webhook", "none"]
+      },
+      "tasks": {
+        "backend_ref": "tasks.adapter",
+        "batching_ref": "tasks.batching",
+        "editor_role_ref": "tasks.editor_role",
+        "viewer_role_ref": "tasks.viewer_role",
+        "poll_completion_ref": "tasks.poll_completion",
+        "alternatives": ["none", "custom_http"]
+      },
+      "rendering": {
+        "renderer_registry": {
+          "channel_overview": "<OVERVIEW_RENDERER_ID>",
+          "operator_detail": "<DETAIL_RENDERER_ID>"
+        },
+        "field_visibility_ref": "adapters.output.notifications.channels",
+        "policy_hooks_ref": "policy_hooks",
+        "tone_hooks_enabled": false
+      }
+    }
+  },
+  "output": {
+    "root": "./output",
+    "run_log_dir": "./output/runs",
+    "backup_dir": "./output/backups",
+    "state_dir": "./output/state"
+  },
+  "safety": {
+    "write_enabled": false,
+    "backup_required": true,
+    "verify_untouched_parts": true,
+    "rollback_on_verify_failure": true,
+    "register_only_after_verified_write": true
+  },
+  "wizard": {
+    "schema_version": 1,
+    "mode": "guided",
+    "preset": "daily_intake",
+    "preset_options": [
+      "daily_intake",
+      "custom"
+    ],
+    "connector": {
+      "platform": "feishu",
+      "platform_options": [
+        "feishu",
+        "wecom"
+      ],
+      "connection_status": "disconnected",
+      "group_discovery": "list_all",
+      "group_selection": "multi",
+      "selected_group_ids": [],
+      "group_isolation": "per_group",
+      "match_by": "exact_id"
+    },
+    "message_sources": [
+      "image",
+      "file"
+    ],
+    "message_source_options": [
+      "image",
+      "text",
+      "link",
+      "template_message",
+      "card",
+      "file",
+      "feed",
+      "api",
+      "structured_record"
+    ],
+    "output": {
+      "mode": "existing_report",
+      "mode_options": [
+        "existing_report",
+        "new_report",
+        "message_only",
+        "artifact_export"
+      ],
+      "existing_report": {
+        "write_mode": "new_sheet",
+        "write_mode_options": [
+          "existing_cells",
+          "new_sheet"
+        ],
+        "sheet": "<SHEET_NAME>",
+        "create_workbook_if_missing": false
+      },
+      "new_report": {
+        "enabled": false,
+        "requires_explicit_authorization": true,
+        "authorized_by": null,
+        "template": "<REPORT_TEMPLATE>",
+        "target_dir": "<REPORT_DIR>",
+        "backup_required": true,
+        "never_overwrite_existing": true
+      }
+    },
+    "notifications": {
+      "template_catalog": [
+        "minimal",
+        "compact_professional",
+        "alert_only",
+        "full_audit"
+      ],
+      "selected_templates": [
+        "minimal",
+        "compact_professional"
+      ],
+      "channel_binding": {
+        "public_channel": "minimal",
+        "operator_channel": "compact_professional"
+      },
+      "delivery_whitelist": []
+    },
+    "schedule": {
+      "preset": "daily_0900",
+      "preset_options": [
+        "daily_0900",
+        "weekday_0900",
+        "daily_three_rounds",
+        "monthly_1_4",
+        "monthly_10",
+        "hourly",
+        "custom"
+      ],
+      "cron": "0 9 * * *",
+      "timezone": "<TIMEZONE>",
+      "user_confirmed": false,
+      "custom_cron_allowed": true
+    },
+    "confirmation": {
+      "review_all_choices": true,
+      "dry_run": true,
+      "trial_run_writes_disabled": true,
+      "user_confirmed": false
+    }
+  },
+  "engine": {
+    "input": {
+      "adapter": "local_folder",
+      "path": "./inbox"
+    },
+    "output": {
+      "adapter": "xlsx",
+      "mode": "existing_report",
+      "write_mode": "new_sheet",
+      "path": "./out/report.xlsx",
+      "sheet": "detail",
+      "anchor": "A1",
+      "csv_path": "./out/report.csv",
+      "json_path": "./out/report.json"
+    },
+    "notify": {
+      "adapter": "stdout",
+      "webhook_url": ""
+    },
+    "dedupe": {
+      "key_fields": [
+        "business_key"
+      ],
+      "ledger_path": "./state/ledger.json"
+    },
+    "timezone": "UTC"
+  }
+}

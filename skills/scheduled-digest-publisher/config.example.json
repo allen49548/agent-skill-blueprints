@@ -1,0 +1,207 @@
+{
+  "schema_version": 1,
+  "schedule": {
+    "cron": "0 9 * * *",
+    "timezone": "<SCHEDULE_TIMEZONE>",
+    "enabled": true
+  },
+  "display_timezone": "<DISPLAY_TIMEZONE>",
+  "business_period": {
+    "window_hours": 30,
+    "query_padding_days": 1,
+    "clock": "system"
+  },
+  "sources": [
+    {
+      "id": "source-a",
+      "type": "feed",
+      "endpoint": "<SOURCE_ENDPOINT_URL>",
+      "category": "general",
+      "enabled": true
+    },
+    {
+      "id": "source-b",
+      "type": "api",
+      "endpoint": "<SECOND_SOURCE_ENDPOINT_URL>",
+      "category": "technology",
+      "enabled": true
+    }
+  ],
+  "source_denylist": [],
+  "schedule_source": {
+    "id": "event-source",
+    "type": "api",
+    "endpoint": "<SCHEDULE_ENDPOINT_URL>",
+    "enabled": true
+  },
+  "selection": {
+    "min_items": 8,
+    "max_items": 12,
+    "categories": ["general", "business", "technology", "world", "events"],
+    "dedupe_by": "normalized_title_and_fact",
+    "require_source_link": true
+  },
+  "focus": {
+    "entity_id": "<FOCUS_ENTITY_ID>",
+    "entity_label": "<FOCUS_ENTITY_LABEL>",
+    "always_first": true,
+    "heading_marker": "*",
+    "require_next_occurrence_when_absent": true
+  },
+  "verification": {
+    "min_cross_checks": 2,
+    "require_source_links": true,
+    "on_conflict": "prefer_traceable_authority"
+  },
+  "delivery": {
+    "channel_adapter": "<CHANNEL_ADAPTER_ID>",
+    "identity": "service",
+    "allowlist": [
+      {
+        "channel_id": "<CHANNEL_ID>",
+        "enabled": false
+      }
+    ],
+    "idempotency_key_template": "digest:{period}:{channel_id}:{key_suffix}",
+    "key_suffix": "",
+    "test_key_suffix": "test",
+    "render_mode": "rich",
+    "render_fallback": "plain_text"
+  },
+  "output": {
+    "root": "./digest-output",
+    "per_period_dir": true,
+    "artifacts": ["material.json", "draft.md", "final.md", "run.log", "send.log"]
+  },
+  "wizard": {
+    "schema_version": 1,
+    "mode": "guided",
+    "preset": "custom",
+    "preset_options": [
+      "daily_intake",
+      "custom"
+    ],
+    "connector": {
+      "platform": "feishu",
+      "platform_options": [
+        "feishu",
+        "wecom"
+      ],
+      "connection_status": "disconnected",
+      "group_discovery": "list_all",
+      "group_selection": "multi",
+      "selected_group_ids": [],
+      "group_isolation": "per_group",
+      "match_by": "exact_id"
+    },
+    "message_sources": [
+      "feed",
+      "api",
+      "text",
+      "link"
+    ],
+    "message_source_options": [
+      "image",
+      "text",
+      "link",
+      "template_message",
+      "card",
+      "file",
+      "feed",
+      "api",
+      "structured_record"
+    ],
+    "output": {
+      "mode": "message_only",
+      "mode_options": [
+        "existing_report",
+        "new_report",
+        "message_only",
+        "artifact_export"
+      ],
+      "existing_report": {
+        "write_mode": "new_sheet",
+        "write_mode_options": [
+          "existing_cells",
+          "new_sheet"
+        ],
+        "sheet": "<SHEET_NAME>",
+        "create_workbook_if_missing": false
+      },
+      "new_report": {
+        "enabled": false,
+        "requires_explicit_authorization": true,
+        "authorized_by": null,
+        "template": "<REPORT_TEMPLATE>",
+        "target_dir": "<REPORT_DIR>",
+        "backup_required": true,
+        "never_overwrite_existing": true
+      }
+    },
+    "notifications": {
+      "template_catalog": [
+        "minimal",
+        "compact_professional",
+        "alert_only",
+        "full_audit"
+      ],
+      "selected_templates": [
+        "minimal"
+      ],
+      "channel_binding": {
+        "public_channel": "minimal",
+        "operator_channel": null
+      },
+      "delivery_whitelist": []
+    },
+    "schedule": {
+      "preset": "daily_0900",
+      "preset_options": [
+        "daily_0900",
+        "weekday_0900",
+        "daily_three_rounds",
+        "monthly_1_4",
+        "monthly_10",
+        "hourly",
+        "custom"
+      ],
+      "cron": "0 9 * * *",
+      "timezone": "<TIMEZONE>",
+      "user_confirmed": false,
+      "custom_cron_allowed": true
+    },
+    "confirmation": {
+      "review_all_choices": true,
+      "dry_run": true,
+      "trial_run_writes_disabled": true,
+      "user_confirmed": false
+    }
+  },
+  "engine": {
+    "input": {
+      "adapter": "local_folder",
+      "path": "./inbox"
+    },
+    "output": {
+      "adapter": "artifact_export",
+      "mode": "message_only",
+      "write_mode": "new_sheet",
+      "path": "./out/report.xlsx",
+      "sheet": "detail",
+      "anchor": "A1",
+      "csv_path": "./out/report.csv",
+      "json_path": "./out/report.json"
+    },
+    "notify": {
+      "adapter": "stdout",
+      "webhook_url": ""
+    },
+    "dedupe": {
+      "key_fields": [
+        "business_key"
+      ],
+      "ledger_path": "./state/ledger.json"
+    },
+    "timezone": "UTC"
+  }
+}
