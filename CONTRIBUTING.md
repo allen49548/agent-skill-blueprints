@@ -4,7 +4,7 @@ These packages are runnable capability skills with a shared runtime and per-pack
 
 ## Non-negotiable rules
 
-1. **English only.** Names, concepts, design documents, examples, configuration keys and inline comments must be English. Do not add localized trigger phrases to `SKILL.md`; localization is an adapter concern.
+1. **Code in English, READMEs in Chinese.** Identifiers, concepts, `SKILL.md`, `DESIGN.md`, `docs/`, config keys and inline comments stay English. All five `README.md` files are user-facing Chinese. `tools/check_repo.py` enforces both directions. Do not add localized trigger phrases to `SKILL.md` frontmatter.
 2. **Capability-level naming.** Package slugs, config keys and concept names describe the mechanism. Domain nouns may appear only in illustrative use cases, never in identifiers.
 3. **No project-specific vocabulary.** Do not introduce brands, product names, organization names, human roles, store names, team names or industry jargon into concepts or identifiers. `feishu` and `wecom` are allowed only as config option values.
 4. **No real identifiers.** Chat identifiers, account identifiers, absolute home-directory paths, real personal names, real amounts, tokens and API keys are forbidden anywhere in the repository. Use `<PLACEHOLDER>` or an environment variable reference.
@@ -40,7 +40,7 @@ The description must be trigger-oriented (what a user would ask for) and must st
 
 ## Pull request checklist
 
-- [ ] No non-English prose, identifiers or comments.
+- [ ] All five READMEs are Chinese; all other docs, identifiers and comments are English.
 - [ ] No real names, identifiers, paths, amounts or credentials.
 - [ ] `config.example.json` parses and the `engine` section works with zero credentials; `config.schema.md` documents every field.
 - [ ] `profile.json` declares defaults, applicable wizard steps and invariants.

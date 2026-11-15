@@ -1,39 +1,39 @@
-# Verified Batch Calculation
+# 可复核批量计算（`verified-batch-calculation`）
 
-Compute per-entity results from human-confirmed rules, prove them through an independent recomputation, and deliver one private result per recipient only after a fingerprint-bound approval gate. Exactly two business capabilities: `compute` and `verify`.
+按已确认的规则计算各实体的结果，通过独立路径复核，再经指纹绑定的审批闸门，逐人投递各自的结果。业务能力恰好只有两个：`compute` 和 `verify`。
 
-Onboarding is guided by `docs/onboarding-contract.md` at the repository root; use its quick-start preset if you are unsure.
+> **实现状态：目标设计，尚未实现。** 当前只运行通用流水线；独立重算、八类核对、审批闸门与指纹绑定都不在运行时里。依赖任何不变量之前，务必先读 [能力矩阵](../../docs/capability-matrix.md)。
 
-`build.py` at the repository root produces a standalone copy of this package into `dist/`. Read [docs/capability-matrix.md](../../docs/capability-matrix.md) to see which parts are implemented.
+接入向导由仓库根目录的 `docs/onboarding-contract.md` 统一定义，拿不准就用快速开始预设。根目录的 `build.py` 可把本包生成成可独立分发的副本到 `dist/`。
 
-## Use when
+## 适用场景
 
-- A periodic allocation, quota, score or entitlement is high-stakes and rules differ per entity.
-- Rules are inferred from historical results and must be confirmed by a human before use.
-- A wrong result must never be delivered, and a bug must not agree with its own check.
-- A scheduled job must stop at a preview and wait for an approver.
+- 周期性的分配、额度、评分或权益计算代价高，且规则因实体而异。
+- 规则从历史结果反推，必须由人确认后才能使用。
+- 错误结果绝不能被投递，且校验不能复用自己的计算实现。
+- 定时任务必须停在预览，等待审批人。
 
-## Do not use when
+## 不适用场景
 
-Low-stakes single-pass calculations, document collection and deduplication (`document-intake-ledger`), fixed-layout workbook updates (`message-to-workbook-sync`), or any pipeline needing a third business capability.
+低风险、可回滚的单次计算；文档归集与去重（`document-intake-ledger`）；固定版式报表更新（`message-to-workbook-sync`）；以及任何需要第三种业务能力的流水线。
 
-## Quick start
+## 快速开始
 
-Self-contained. Python 3.9+ standard library only, no install and no credentials.
+自包含，仅依赖 Python 3.9+ 标准库，无需安装、无需凭证。注意以下命令跑的是共享的通用流水线，不是上面描述的复核能力。
 
 ```bash
-python3 run.py demo      # bundled sample data, full pipeline, artifacts in demo-out/
-python3 run.py setup     # 9-step wizard -> config.json
-python3 run.py doctor    # validate config and adapters
-python3 run.py run       # dry-run by default; --no-dry-run for real writes
+python3 run.py demo      # 内置样例数据，跑通全链路，产物在 demo-out/
+python3 run.py setup     # 九步向导 -> config.json
+python3 run.py doctor    # 校验配置与适配器
+python3 run.py run       # 默认 dry-run；--no-dry-run 才真正写入
 ```
 
-`setup --yes` accepts the recommended preset. `python3 run.py install --apply` installs this skill into the local skills directory. See `docs/onboarding-contract.md` at the repository root for the wizard contract and `config.schema.md` for every field.
+`setup --yes` 可无提示套用推荐预设；`python3 run.py install --apply` 把技能装进本地技能目录。向导契约见根目录 `docs/onboarding-contract.md`，逐字段说明见 `config.schema.md`。
 
-## Read next
+## 接下来读什么
 
-`DESIGN.md` defines the rule DSL safety constraints, the fingerprint, the state machine and the failure matrix. Read the fingerprint section first: a confirmation not bound to inputs, rules and results can be replayed against a changed result. Field-by-field configuration is in `config.schema.md`.
+`DESIGN.md` 定义规则 DSL 的安全约束、指纹、状态机与失败矩阵，属于目标设计。先读指纹那一节：确认若未绑定输入、规则与结果，就可能被复用到已变更的结果上。字段说明在 `config.schema.md`。
 
-## Files
+## 文件清单
 
-`SKILL.md` (contract), `README.md`, `DESIGN.md`, `config.example.json`, `config.schema.md`.
+`SKILL.md`（契约）、`README.md`、`DESIGN.md`、`config.example.json`、`config.schema.md`。

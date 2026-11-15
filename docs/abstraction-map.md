@@ -105,3 +105,11 @@ A review against common open-source quality signals found that the first release
 | 31 | Project governance | `VERSION`, `CHANGELOG.md`, `SECURITY.md`, issue templates, `tools/check_repo.py`, structured run log, adapter registry validation, resolved LICENSE placeholder |
 
 Version 0.2.0. The six `run.py` commands are unchanged, so the fresh-clone workflow still works.
+
+## README language decision
+
+| # | Decision | Choice |
+| --- | --- | --- |
+| 32 | User-facing README language | All five READMEs switched to Chinese. Abstracted naming, concepts, config keys, `SKILL.md`, `DESIGN.md` and `docs/` remain English, so the earlier "English only" requirement still holds for anything that defines a name or a concept. `tools/check_repo.py` enforces both directions. |
+
+Version 0.2.1.

@@ -18,10 +18,12 @@ SKIP_DIRS = {".git", "dist", "demo-out", "out", "state", "inbox", "__pycache__"}
 # These files contain the patterns only as documentation / regex literals.
 PRIVACY_EXEMPT = {"PUBLISHING.md", "check_repo.py"}
 
+# Platform names (Feishu / WeCom) are legitimate config options and appear in
+# the Chinese READMEs; only business-specific vocabulary is forbidden here.
 FORBIDDEN = re.compile(
     r"(oc_[a-f0-9]{16,}|ou_[a-f0-9]{16,}|ghp_[A-Za-z0-9]{20,}|"
-    r"/Users/|/home/|\u98de\u4e66|\u4f01\u4e1a\u5fae\u4fe1|"
-    r"\u7269\u6d41\u90e8|\u53f8\u673a|\u62a5\u9500|\u7f8e\u7532)")
+    r"/Users/|/home/|\u7269\u6d41\u90e8|\u53f8\u673a|\u62a5\u9500|\u7f8e\u7532)")
+HAN = re.compile(r"[\u4e00-\u9fff]")
 
 
 def tracked_files() -> list[Path]:
@@ -59,11 +61,18 @@ def main() -> int:
     tracked = tracked_files()
 
     print("Encoding and privacy")
+    # README files are user-facing Chinese. All other docs, code and config
+    # stay ASCII so identifiers and concepts remain language-neutral.
     bad_ascii = [(str(p.relative_to(ROOT)), i)
-                 for p in files
+                 for p in files if p.name != "README.md"
                  for i, line in enumerate(p.read_text(errors="replace").splitlines(), 1)
                  if any(ord(c) > 127 for c in line)]
-    ok &= check(not bad_ascii, "ASCII-only sources", str(bad_ascii[:5]) if bad_ascii else "")
+    ok &= check(not bad_ascii, "ASCII-only sources (README exempt)", str(bad_ascii[:5]) if bad_ascii else "")
+    readmes = [p for p in files if p.name == "README.md"]
+    not_chinese = [str(p.relative_to(ROOT)) for p in readmes
+                   if len(HAN.findall(p.read_text(errors="replace"))) < 80]
+    ok &= check(len(readmes) == 5 and not not_chinese,
+                "all 5 READMEs are Chinese", str(not_chinese) if not_chinese else "")
     leaks = [(str(p.relative_to(ROOT)), i)
              for p in files if p.name not in PRIVACY_EXEMPT
              for i, line in enumerate(p.read_text(errors="replace").splitlines(), 1)

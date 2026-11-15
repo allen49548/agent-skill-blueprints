@@ -65,19 +65,19 @@ grep -rInE '(oc_[a-f0-9]{16,}|ou_[a-f0-9]{16,}|ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-
   --exclude-dir=.git --exclude=PUBLISHING.md . || echo "CLEAN: no identifiers, paths or credentials"
 ```
 
-Check that all prose is ASCII-only English:
+Check that all prose except the Chinese READMEs is ASCII-only English:
 
 ```bash
 python3 - <<'PY'
 import pathlib
 bad = []
 for p in pathlib.Path('.').rglob('*'):
-    if not p.is_file() or '.git' in p.parts:
+    if not p.is_file() or '.git' in p.parts or p.name == 'README.md':
         continue
     for i, line in enumerate(p.read_text(errors='replace').splitlines(), 1):
         if any(ord(c) > 127 for c in line):
             bad.append((str(p), i))
-print('CLEAN: ASCII only' if not bad else 'NON-ASCII FOUND: ' + repr(bad[:20]))
+print('CLEAN: ASCII only (README exempt)' if not bad else 'NON-ASCII FOUND: ' + repr(bad[:20]))
 PY
 ```
 

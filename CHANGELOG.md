@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows Keep
 
 Version numbers refer to the shared runtime and the repository as a whole. `config.example.json` carries its own `schema_version` and `wizard.schema_version`; a change to either requires a migration note here.
 
+## [0.2.1] - 2026-11-15
+
+### Changed
+
+- All five `README.md` files are now Chinese (repository root plus the four skills). Commands, identifiers, config keys and file paths remain in English.
+- `SKILL.md`, `DESIGN.md`, `docs/`, code comments and config keys remain English, so concepts and naming stay language-neutral.
+- `tools/check_repo.py` exempts READMEs from the ASCII gate, allows platform names in user-facing docs, and now asserts that all five READMEs actually contain Chinese. Business-specific vocabulary remains forbidden.
+- `PUBLISHING.md` ASCII pre-flight and `CONTRIBUTING.md` language rule updated to match.
+
+No runtime behaviour changed. Tests, CI matrix and capability statuses are unchanged.
+
 ## [0.2.0] - 2026-11-15
 
 Refactor release. The public API (the six `run.py` commands) is unchanged; the internal layout and the guarantee behind it changed.

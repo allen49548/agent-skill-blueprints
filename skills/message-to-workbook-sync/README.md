@@ -1,40 +1,40 @@
-# Message to Workbook Sync
+# 消息到报表同步（`message-to-workbook-sync`）
 
-Parse semi-structured channel messages in multiple formats and write normalized values into existing fixed-layout workbooks at cell level, idempotently and without changing their structure.
+解析多种格式的半结构化通道消息，把归一后的值按单元格幂等写入已有报表，且不改变报表结构。
 
-Onboarding is guided by `docs/onboarding-contract.md` at the repository root; use its quick-start preset if you are unsure.
+> 实现状态：通用运行时（读取、去重、写入、通知）已实现；语义归一、别名映射、归属优先级、多轮轮询仍是目标设计。详见 [能力矩阵](../../docs/capability-matrix.md)。
 
-`build.py` at the repository root produces a standalone copy of this package into `dist/`. Read [docs/capability-matrix.md](../../docs/capability-matrix.md) to see which parts are implemented.
+接入向导由仓库根目录的 `docs/onboarding-contract.md` 统一定义，拿不准就用快速开始预设。根目录的 `build.py` 可把本包生成成可独立分发的副本到 `dist/`。
 
-## Use when
+## 适用场景
 
-- Records arrive as text templates or rendered cards and must land in an existing workbook.
-- The workbook layout is owned by someone else and formulas, cached values and other sheets must survive byte-identically.
-- Corrections must overwrite earlier values, including corrections to a closed earlier period.
-- Several scheduled rounds per period end in per-group aggregates.
-- Entity-to-group ownership must be authoritative and must never leak across groups.
+- 记录以文本模板或卡片消息发布，需要落到一份已存在的报表里。
+- 报表版式归别人维护，公式、缓存值和其他 sheet 必须逐字节保留。
+- 更正要覆盖旧值，包括针对已关闭的早期周期的更正。
+- 一个周期跑多轮，最后一轮产出分组汇总。
+- 实体与分组的归属必须权威，且绝不跨组泄漏。
 
-## Do not use when
+## 不适用场景
 
-Append-only record collection (`document-intake-ledger`), workflows that can use a structured form instead of parsing, cases requiring new workbooks, or results needing an approval gate (`verified-batch-calculation`).
+追加式记录归集（`document-intake-ledger`）、可以直接用结构化表单代替消息解析的场景、需要新建报表文件的场景，以及结果需要审批闸门（`verified-batch-calculation`）的场景。
 
-## Quick start
+## 快速开始
 
-Self-contained. Python 3.9+ standard library only, no install and no credentials.
+自包含，仅依赖 Python 3.9+ 标准库，无需安装、无需凭证。
 
 ```bash
-python3 run.py demo      # bundled sample data, full pipeline, artifacts in demo-out/
-python3 run.py setup     # 9-step wizard -> config.json
-python3 run.py doctor    # validate config and adapters
-python3 run.py run       # dry-run by default; --no-dry-run for real writes
+python3 run.py demo      # 内置样例数据，跑通全链路，产物在 demo-out/
+python3 run.py setup     # 九步向导 -> config.json
+python3 run.py doctor    # 校验配置与适配器
+python3 run.py run       # 默认 dry-run；--no-dry-run 才真正写入
 ```
 
-`setup --yes` accepts the recommended preset. `python3 run.py install --apply` installs this skill into the local skills directory. See `docs/onboarding-contract.md` at the repository root for the wizard contract and `config.schema.md` for every field.
+`setup --yes` 可无提示套用推荐预设；`python3 run.py install --apply` 把技能装进本地技能目录。向导契约见根目录 `docs/onboarding-contract.md`，逐字段说明见 `config.schema.md`。
 
-## Read next
+## 接下来读什么
 
-`DESIGN.md` covers ownership precedence, glued field/value splitting, the part-level surgical write, cross-period corrections and the failure matrix. Read the write strategy before choosing a spreadsheet library: a full save in the wrong mode can drop formulas and custom parts. Field-by-field configuration is in `config.schema.md`.
+`DESIGN.md` 覆盖归属优先级、字段名与数值粘连的拆分、部件级外科写入、跨周期更正与失败矩阵。选电子表格库之前先读写策略：用错模式做一次全量保存，可能丢掉公式和自定义部件。字段说明在 `config.schema.md`。
 
-## Files
+## 文件清单
 
-`SKILL.md` (contract), `README.md`, `DESIGN.md`, `config.example.json`, `config.schema.md`.
+`SKILL.md`（契约）、`README.md`、`DESIGN.md`、`config.example.json`、`config.schema.md`。
