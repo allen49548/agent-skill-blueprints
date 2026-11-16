@@ -72,10 +72,36 @@ PRESET_CRONS = {
 }
 
 
+# --------------------------------------------------------------------------- constants
+# The record schema is defined once here and shared by normalize(), write_outputs()
+# and the notification templates. Adding a field touches this one definition instead
+# of three separate code sites.
+RECORD_FIELDS = ["id", "entity", "group", "value", "date", "business_key", "source_type", "note"]
+REPORT_COLUMNS = RECORD_FIELDS[:-1]  # `note` is ledger-only and not written to reports
+
+UNRESOLVED_ENTITY = "unresolved"
+UNSUPPORTED_TYPE = "unsupported"
+
+WEB_TIMEOUT = 10       # seconds, for webhook reads and notification delivery
+HASH_ID_LEN = 12       # chars of the content hash used when a record has no id
+SHEET_NAME_MAX = 31    # Excel worksheet name length limit
+MAX_RID = 999          # ceiling when scanning for a free relationship id
+
+
 # --------------------------------------------------------------------------- helpers
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def _run_id() -> str:
+    """A per-run identifier, second precision."""
+    return datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def _dir_stamp() -> str:
+    """A microsecond-precise stamp so two runs never share an output directory."""
+    return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
 
 def say(msg: str = "") -> None:
@@ -370,53 +396,70 @@ def cmd_setup(args) -> int:
 
 # --------------------------------------------------------------------------- adapters
 
+def _read_local_folder(ic: dict) -> tuple[list[dict], list[str]]:
+    notes: list[str] = []
+    raw: list[dict] = []
+    root = (HERE / ic.get("path", "./inbox")).resolve()
+    if not root.exists():
+        return [], [f"input folder not found: {root.name}"]
+    files = sorted([p for p in root.rglob("*")
+                    if p.is_file() and p.suffix.lower() in (".json", ".jsonl")])
+    if not files:
+        notes.append(f"no .json/.jsonl files in {root.name}")
+    for p in files:
+        if p.suffix.lower() == ".jsonl":
+            for line in p.read_text(encoding="utf-8").splitlines():
+                if line.strip():
+                    try:
+                        raw.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        notes.append(f"skipped invalid line in {p.name}")
+        else:
+            data = load_json(p, None)
+            if isinstance(data, list):
+                raw.extend([x for x in data if isinstance(x, dict)])
+            elif isinstance(data, dict):
+                raw.append(data)
+    return raw, notes
+
+
+def _read_json_file(ic: dict) -> tuple[list[dict], list[str]]:
+    path = (HERE / ic.get("path", "./inbox/records.json")).resolve()
+    data = load_json(path, None)
+    raw = data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
+    return raw, []
+
+
+def _read_webhook(ic: dict) -> tuple[list[dict], list[str]]:
+    url = ic.get("url", "")
+    if not url or PLACEHOLDER.match(url):
+        return [], ["webhook input needs a url"]
+    try:
+        with urllib.request.urlopen(url, timeout=WEB_TIMEOUT) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        raw = data if isinstance(data, list) else [data]
+        return raw, []
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        return [], [f"webhook input failed: {exc}"]
+
+
+# Dispatch table: registering a new input adapter means adding one entry here
+# instead of editing the pipeline. Keep these names in sync with ADAPTERS["input"].
+_INPUT_READERS = {
+    "local_folder": _read_local_folder,
+    "json_file": _read_json_file,
+    "webhook": _read_webhook,
+}
+
+
 def read_records(engine_cfg: dict) -> tuple[list[dict], list[str]]:
     """Read raw records from the configured input adapter."""
     ic = engine_cfg.get("input", {})
     adapter = ic.get("adapter", "local_folder")
-    notes: list[str] = []
-    raw: list[dict] = []
-
-    if adapter == "local_folder":
-        root = (HERE / ic.get("path", "./inbox")).resolve()
-        if not root.exists():
-            return [], [f"input folder not found: {root.name}"]
-        files = sorted([p for p in root.rglob("*")
-                        if p.is_file() and p.suffix.lower() in (".json", ".jsonl")])
-        if not files:
-            notes.append(f"no .json/.jsonl files in {root.name}")
-        for p in files:
-            if p.suffix.lower() == ".jsonl":
-                for line in p.read_text(encoding="utf-8").splitlines():
-                    if line.strip():
-                        try:
-                            raw.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            notes.append(f"skipped invalid line in {p.name}")
-            else:
-                data = load_json(p, None)
-                if isinstance(data, list):
-                    raw.extend([x for x in data if isinstance(x, dict)])
-                elif isinstance(data, dict):
-                    raw.append(data)
-    elif adapter == "json_file":
-        path = (HERE / ic.get("path", "./inbox/records.json")).resolve()
-        data = load_json(path, None)
-        raw = data if isinstance(data, list) else ([data] if isinstance(data, dict) else [])
-    elif adapter == "webhook":
-        url = ic.get("url", "")
-        if not url or PLACEHOLDER.match(url):
-            notes.append("webhook input needs a url")
-        else:
-            try:
-                with urllib.request.urlopen(url, timeout=10) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                raw = data if isinstance(data, list) else [data]
-            except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
-                notes.append(f"webhook input failed: {exc}")
-    else:
-        notes.append(f"input adapter not registered: {adapter}")
-    return raw, notes
+    reader = _INPUT_READERS.get(adapter)
+    if reader is None:
+        return [], [f"input adapter not registered: {adapter}"]
+    return reader(ic)
 
 
 def normalize(raw: list[dict]) -> list[dict]:
@@ -424,7 +467,7 @@ def normalize(raw: list[dict]) -> list[dict]:
     for r in raw:
         rec = {
             "id": str(r.get("id") or r.get("message_id") or ""),
-            "entity": str(r.get("entity") or "unresolved"),
+            "entity": str(r.get("entity") or UNRESOLVED_ENTITY),
             "group": str(r.get("group") or "default"),
             "value": r.get("value", 0),
             "date": str(r.get("date") or ""),
@@ -438,7 +481,7 @@ def normalize(raw: list[dict]) -> list[dict]:
             rec["value"] = 0.0
         if not rec["id"]:
             rec["id"] = hashlib.sha256(
-                json.dumps(r, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:12]
+                json.dumps(r, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:HASH_ID_LEN]
         if not rec["business_key"]:
             rec["business_key"] = "|".join(
                 [rec["group"], rec["entity"], rec["date"], str(rec["value"]), rec["id"]])
@@ -517,7 +560,7 @@ def _new_workbook(sheets: dict[str, list[list]]) -> bytes:
             rels.append(f'<Relationship Id="rId{idx}" '
                         'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
                         f'Target="worksheets/sheet{idx}.xml"/>')
-            safe = INVALID_SHEET_CHARS.sub("_", name)[:31]
+            safe = INVALID_SHEET_CHARS.sub("_", name)[:SHEET_NAME_MAX]
             wb.append(f'<sheet name="{escape(safe)}" sheetId="{idx}" r:id="rId{idx}"/>')
             z.writestr(f"xl/worksheets/sheet{idx}.xml", _sheet_xml(rows))
         ct.append("</Types>")
@@ -563,7 +606,7 @@ def _append_sheet(existing: Path, sheet_name: str, rows: list[list], backup_dir:
     wb = parts.get("xl/workbook.xml", b"").decode("utf-8")
     rels = parts.get("xl/_rels/workbook.xml.rels", b"").decode("utf-8")
     ct = parts.get("[Content_Types].xml", b"").decode("utf-8")
-    safe = INVALID_SHEET_CHARS.sub("_", sheet_name)[:31]
+    safe = INVALID_SHEET_CHARS.sub("_", sheet_name)[:SHEET_NAME_MAX]
 
     # Idempotent path: the named sheet already exists, so only replace its part.
     for tag in re.findall(r"<sheet\b[^>]*/>", wb):
@@ -592,7 +635,7 @@ def _append_sheet(existing: Path, sheet_name: str, rows: list[list], backup_dir:
             idx = max(idx, int(m.group(1)))
     idx += 1
     used = set(re.findall(r'Id="(rId\d+)"', rels))
-    rid = next(f"rId{i}" for i in range(1, 999) if f"rId{i}" not in used)
+    rid = next(f"rId{i}" for i in range(1, MAX_RID + 1) if f"rId{i}" not in used)
     sheet_id = max([int(x) for x in re.findall(r'sheetId="(\d+)"', wb)], default=0) + 1
     wb = wb.replace("</sheets>", f'<sheet name="{escape(safe)}" sheetId="{sheet_id}" r:id="{rid}"/></sheets>')
     rels = rels.replace("</Relationships>",
@@ -656,6 +699,47 @@ def _update_cells(existing: Path, rows: list[list], backup_dir: Path | None) -> 
 
 # --------------------------------------------------------------------------- output
 
+def _write_xlsx(records: list[dict], oc: dict, mode: str, write_mode: str, sheet: str,
+                wizard: dict, out_dir: Path, rows: list[list]) -> list[str]:
+    """Write records into a workbook, honouring the new_report / no-overwrite /
+    new_sheet / existing_cells modes. Returns human-readable notes."""
+    notes: list[str] = []
+    path = (HERE / oc.get("path", "./out/report.xlsx")).resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    new_report = wizard.get("output", {}).get("new_report", {})
+    if mode == "new_report":
+        if not new_report.get("enabled") or not new_report.get("authorized_by"):
+            notes.append("new_report blocked: explicit authorization missing")
+        elif path.exists() and new_report.get("never_overwrite_existing", True):
+            notes.append("new_report blocked: target exists and no-overwrite is on")
+        else:
+            path.write_bytes(_new_workbook({sheet: rows}))
+            notes.append(f"{path.name} created")
+    elif not path.exists():
+        notes.append("xlsx target missing; no workbook created (record_without_write)")
+        (out_dir / "preview.xlsx").write_bytes(_new_workbook({sheet: rows}))
+        with (out_dir / "report.csv").open("w", newline="", encoding="utf-8") as fh:
+            csv.writer(fh).writerows(rows)
+        save_json(out_dir / "report.json", records)
+        notes.append("preview.xlsx + report.csv / report.json written to run dir (target untouched)")
+    elif write_mode == "new_sheet":
+        added = _append_sheet(path, sheet, rows, out_dir / "backups")
+        notes.append(f"{path.name}: added {added}")
+    elif write_mode == "existing_cells":
+        n = _update_cells(path, rows, out_dir / "backups")
+        notes.append(f"{path.name}: updated {n} cells")
+    else:
+        notes.append(f"unknown write_mode: {write_mode}")
+    # verify untouched parts still readable
+    try:
+        with zipfile.ZipFile(path, "r") as z:
+            if z.testzip() is not None:
+                notes.append("xlsx verification failed")
+    except (OSError, zipfile.BadZipFile):
+        notes.append("xlsx verification skipped: target not created")
+    return notes
+
+
 def write_outputs(records: list[dict], engine_cfg: dict, out_dir: Path, dry_run: bool,
                   wizard: dict) -> list[str]:
     oc = engine_cfg.get("output", {})
@@ -664,9 +748,7 @@ def write_outputs(records: list[dict], engine_cfg: dict, out_dir: Path, dry_run:
     write_mode = oc.get("write_mode", "new_sheet")
     sheet = oc.get("sheet", "detail")
     notes: list[str] = []
-    rows = [["id", "entity", "group", "value", "date", "business_key", "source_type"]] + [
-        [r["id"], r["entity"], r["group"], r["value"], r["date"], r["business_key"], r["source_type"]]
-        for r in records]
+    rows = [REPORT_COLUMNS] + [[r[f] for f in REPORT_COLUMNS] for r in records]
 
     out_dir.mkdir(parents=True, exist_ok=True)
     if dry_run:
@@ -688,39 +770,7 @@ def write_outputs(records: list[dict], engine_cfg: dict, out_dir: Path, dry_run:
         save_json(out_dir / "report.json", records)
         notes.append("report.json")
     if adapter == "xlsx":
-        path = (HERE / oc.get("path", "./out/report.xlsx")).resolve()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        new_report = wizard.get("output", {}).get("new_report", {})
-        if mode == "new_report":
-            if not new_report.get("enabled") or not new_report.get("authorized_by"):
-                notes.append("new_report blocked: explicit authorization missing")
-            elif path.exists() and new_report.get("never_overwrite_existing", True):
-                notes.append("new_report blocked: target exists and no-overwrite is on")
-            else:
-                path.write_bytes(_new_workbook({sheet: rows}))
-                notes.append(f"{path.name} created")
-        elif not path.exists():
-            notes.append("xlsx target missing; no workbook created (record_without_write)")
-            (out_dir / "preview.xlsx").write_bytes(_new_workbook({sheet: rows}))
-            with (out_dir / "report.csv").open("w", newline="", encoding="utf-8") as fh:
-                csv.writer(fh).writerows(rows)
-            save_json(out_dir / "report.json", records)
-            notes.append("preview.xlsx + report.csv / report.json written to run dir (target untouched)")
-        elif write_mode == "new_sheet":
-            added = _append_sheet(path, sheet, rows, out_dir / "backups")
-            notes.append(f"{path.name}: added {added}")
-        elif write_mode == "existing_cells":
-            n = _update_cells(path, rows, out_dir / "backups")
-            notes.append(f"{path.name}: updated {n} cells")
-        else:
-            notes.append(f"unknown write_mode: {write_mode}")
-        # verify untouched parts still readable
-        try:
-            with zipfile.ZipFile(path, "r") as z:
-                if z.testzip() is not None:
-                    notes.append("xlsx verification failed")
-        except (OSError, zipfile.BadZipFile):
-            notes.append("xlsx verification skipped: target not created")
+        notes += _write_xlsx(records, oc, mode, write_mode, sheet, wizard, out_dir, rows)
     return notes
 
 
@@ -728,7 +778,7 @@ def write_outputs(records: list[dict], engine_cfg: dict, out_dir: Path, dry_run:
 
 def render_template(name: str, records: list[dict], dupes: list[dict], meta: dict) -> str:
     total = sum(r["value"] for r in records)
-    anomalies = [r for r in records if r["entity"] == "unresolved" or r["source_type"] == "unsupported"]
+    anomalies = [r for r in records if r["entity"] == UNRESOLVED_ENTITY or r["source_type"] == UNSUPPORTED_TYPE]
     if name == "minimal":
         lines = [f"{r['entity']}: {r['value']} ({r['date']})" for r in records]
         lines.append(f"Total: {total}")
@@ -770,6 +820,18 @@ def render_template(name: str, records: list[dict], dupes: list[dict], meta: dic
     return f"unknown template: {name}"
 
 
+def _post_webhook(url: str, name: str, text: str) -> str:
+    """Deliver one rendered template over HTTP and return a receipt string."""
+    try:
+        req = urllib.request.Request(url, data=json.dumps(
+            {"template": name, "text": text}).encode("utf-8"),
+            headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=WEB_TIMEOUT) as resp:
+            return f"{name}: sent ({resp.status})"
+    except (OSError, urllib.error.URLError) as exc:
+        return f"{name}: FAILED {exc}"
+
+
 def send_notifications(templates: list[str], records: list[dict], dupes: list[dict],
                        engine_cfg: dict, out_dir: Path, meta: dict, dry_run: bool) -> list[str]:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -784,14 +846,7 @@ def send_notifications(templates: list[str], records: list[dict], dupes: list[di
             say(f"--- notification/{name} ---")
             say(text)
         if adapter == "webhook" and url and not dry_run and text:
-            try:
-                req = urllib.request.Request(url, data=json.dumps(
-                    {"template": name, "text": text}).encode("utf-8"),
-                    headers={"Content-Type": "application/json"}, method="POST")
-                with urllib.request.urlopen(req, timeout=10) as resp:
-                    results.append(f"{name}: sent ({resp.status})")
-            except (OSError, urllib.error.URLError) as exc:
-                results.append(f"{name}: FAILED {exc}")
+            results.append(_post_webhook(url, name, text))
     return results
 
 
@@ -806,7 +861,7 @@ def run_pipeline(cfg: dict, profile: dict, out_dir: Path, dry_run: bool,
     raw, errors = read_records(e)
     records = normalize(raw)
     kept, dupes = dedupe(records, e, None if dry_run else out_dir)
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_id = _run_id()
     meta = {"run_id": run_id, "out_dir": str(out_dir), "dry_run": dry_run, "errors": errors}
     written = write_outputs(kept, e, out_dir, dry_run, wizard)
     templates = wizard.get("notifications", {}).get("selected_templates", ["minimal"])
@@ -892,7 +947,7 @@ def cmd_demo(args) -> int:
     profile = load_json(PROFILE_FILE, {})
     if not DEMO_INPUT.exists():
         die("bundled demo data is missing: examples/demo_input.json")
-    out_dir = HERE / "demo-out" / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    out_dir = HERE / "demo-out" / _dir_stamp()
     cfg = demo_config(profile)
     out_dir.mkdir(parents=True, exist_ok=True)
     cfg["engine"]["output"]["path"] = str(out_dir / "report.xlsx")
@@ -916,7 +971,7 @@ def cmd_run(args) -> int:
     if cfg is None:
         die("no config.json yet - run `python3 run.py setup` first")
     dry = not args.no_dry_run
-    out_dir = HERE / "out" / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    out_dir = HERE / "out" / _dir_stamp()
     r = run_pipeline(cfg, profile, out_dir, dry)
     print_report(r)
     say(f"Artifacts: {out_dir}")

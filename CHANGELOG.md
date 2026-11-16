@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format follows Keep
 
 Version numbers refer to the shared runtime and the repository as a whole. `config.example.json` carries its own `schema_version` and `wizard.schema_version`; a change to either requires a migration note here.
 
+## [0.2.3] - 2026-11-16
+
+### Changed
+
+- Extracted magic numbers and business-semantic values into named constants (`RECORD_FIELDS`, `REPORT_COLUMNS`, `UNRESOLVED_ENTITY`, `UNSUPPORTED_TYPE`, `WEB_TIMEOUT`, `HASH_ID_LEN`, `SHEET_NAME_MAX`, `MAX_RID`). The implicit record schema now lives in one place, shared by `normalize`, `write_outputs` and `render_template`.
+- Replaced the `if/elif` input-adapter dispatch with a `_INPUT_READERS` dispatch table plus three dedicated readers (`_read_local_folder`, `_read_json_file`, `_read_webhook`). Registering a new input adapter is now a single dict entry.
+- Split the 60-line XLSX branch out of `write_outputs` into `_write_xlsx`, and extracted `_post_webhook` from `send_notifications`.
+- Unified the duplicated timestamp helpers into `_run_id()` and `_dir_stamp()`.
+
+No public API or runtime behaviour change. All 22 tests and the repository gate pass.
+
 ## [0.2.2] - 2026-11-16
 
 ### Changed
