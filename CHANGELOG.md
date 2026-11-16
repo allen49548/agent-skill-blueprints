@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format follows Keep
 
 Version numbers refer to the shared runtime and the repository as a whole. `config.example.json` carries its own `schema_version` and `wizard.schema_version`; a change to either requires a migration note here.
 
+## [0.2.2] - 2026-11-16
+
+### Changed
+
+- The five `README.md` files were tightened into a shorter, scannable structure (one-line pitch, status banner, use / avoid, quick start, next steps); the root README dropped from ~145 to ~85 lines.
+
+### Performance
+
+- `_update_cells` now rewrites targeted cells in a single compiled-regex pass over the sheet XML instead of recompiling a pattern and rebuilding the whole string for every cell (quadratic -> linear).
+- `_col_letters` is memoized with `lru_cache`; sheet/cell/value regexes are compiled once at import time.
+- `io.BytesIO` uses a top-level `import io` instead of a runtime `__import__`.
+- `dedupe` stamps the whole batch with one timestamp and skips rewriting the ledger when nothing new was kept.
+- Backup filenames now include microseconds so two writes in the same second no longer collide.
+
+No public API change. All 22 tests and the repository gate pass.
+
 ## [0.2.1] - 2026-11-15
 
 ### Changed

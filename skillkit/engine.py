@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import io
 import json
 import logging
 import os
@@ -28,6 +29,7 @@ import urllib.error
 import urllib.request
 import zipfile
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -49,6 +51,13 @@ ADAPTERS = {
     "output": ["csv", "json", "xlsx", "artifact_export", "none"],
     "notify": ["stdout", "webhook", "none"],
 }
+# Precompiled patterns shared by the XLSX writers. Compiling once at import time
+# avoids recompiling the same regex on every cell / sheet and keeps the hot paths
+# allocation-free.
+INVALID_SHEET_CHARS = re.compile(r"[\\/*?:\[\]]")
+SHEET_PART = re.compile(r"xl/worksheets/sheet(\d+)\.xml")
+CELL = re.compile(r'<c r="([A-Z]+[0-9]+)"([^>]*)>(.*?)</c>', re.S)
+VALUE = re.compile(r"<v>.*?</v>", re.S)
 
 LOG = logging.getLogger("skillkit")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
@@ -445,19 +454,25 @@ def dedupe(records: list[dict], engine_cfg: dict, out_dir: Path | None) -> tuple
     seen = set(ledger.keys())
     kept, dupes = [], []
     for r in records:
-        if r["dedupe_key"] in seen:
+        key = r["dedupe_key"]
+        if key in seen:
             dupes.append({**r, "reason": "business_key",
-                          "original_registered_at": ledger.get(r["dedupe_key"], now_iso())})
+                          "original_registered_at": ledger.get(key, "")})
         else:
             kept.append(r)
-            seen.add(r["dedupe_key"])
-    if ledger_path:
-        save_json(ledger_path, {**ledger, **{r["dedupe_key"]: now_iso() for r in kept}})
+            seen.add(key)
+    if ledger_path and kept:
+        # One timestamp for the whole batch: cheaper than calling now_iso() per
+        # record and keeps every entry in a run stamped identically.
+        stamp = now_iso()
+        ledger.update({r["dedupe_key"]: stamp for r in kept})
+        save_json(ledger_path, ledger)
     return kept, dupes
 
 
 # --------------------------------------------------------------------------- xlsx (stdlib)
 
+@lru_cache(maxsize=None)
 def _col_letters(n: int) -> str:
     s = ""
     while n > 0:
@@ -494,7 +509,7 @@ def _new_workbook(sheets: dict[str, list[list]]) -> bytes:
     wb = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
           '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
           'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>']
-    buf = __import__("io").BytesIO()
+    buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for idx, (name, rows) in enumerate(sheets.items(), 1):
             ct.append(f'<Override PartName="/xl/worksheets/sheet{idx}.xml" '
@@ -502,7 +517,7 @@ def _new_workbook(sheets: dict[str, list[list]]) -> bytes:
             rels.append(f'<Relationship Id="rId{idx}" '
                         'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" '
                         f'Target="worksheets/sheet{idx}.xml"/>')
-            safe = re.sub(r"[\\/*?:\[\]]", "_", name)[:31]
+            safe = INVALID_SHEET_CHARS.sub("_", name)[:31]
             wb.append(f'<sheet name="{escape(safe)}" sheetId="{idx}" r:id="rId{idx}"/>')
             z.writestr(f"xl/worksheets/sheet{idx}.xml", _sheet_xml(rows))
         ct.append("</Types>")
@@ -548,7 +563,7 @@ def _append_sheet(existing: Path, sheet_name: str, rows: list[list], backup_dir:
     wb = parts.get("xl/workbook.xml", b"").decode("utf-8")
     rels = parts.get("xl/_rels/workbook.xml.rels", b"").decode("utf-8")
     ct = parts.get("[Content_Types].xml", b"").decode("utf-8")
-    safe = re.sub(r"[\\/*?:\[\]]", "_", sheet_name)[:31]
+    safe = INVALID_SHEET_CHARS.sub("_", sheet_name)[:31]
 
     # Idempotent path: the named sheet already exists, so only replace its part.
     for tag in re.findall(r"<sheet\b[^>]*/>", wb):
@@ -570,8 +585,12 @@ def _append_sheet(existing: Path, sheet_name: str, rows: list[list], backup_dir:
             return part
 
     # First run: add a new worksheet part with a fresh rId and sheetId.
-    names = [n for n in parts if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", n)]
-    idx = max([int(re.search(r"(\d+)", n).group(1)) for n in names], default=0) + 1
+    idx = 0
+    for n in parts:
+        m = SHEET_PART.fullmatch(n)
+        if m:
+            idx = max(idx, int(m.group(1)))
+    idx += 1
     used = set(re.findall(r'Id="(rId\d+)"', rels))
     rid = next(f"rId{i}" for i in range(1, 999) if f"rId{i}" not in used)
     sheet_id = max([int(x) for x in re.findall(r'sheetId="(\d+)"', wb)], default=0) + 1
@@ -592,31 +611,44 @@ def _append_sheet(existing: Path, sheet_name: str, rows: list[list], backup_dir:
 
 
 def _update_cells(existing: Path, rows: list[list], backup_dir: Path | None) -> int:
-    """Surgically replace numeric cell values in the first worksheet by anchor position."""
+    """Surgically replace numeric cell values in the first worksheet by anchor position.
+
+    One compiled-regex pass over the sheet XML rewrites every targeted cell, so the
+    work is linear in the sheet size instead of rebuilding the whole string per cell.
+    """
     if backup_dir:
         backup_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(existing, backup_dir / (existing.name + "." + datetime.now().strftime("%Y%m%d%H%M%S") + ".bak"))
+        stamp = datetime.now().strftime("%Y%m%d%H%M%S%f")
+        shutil.copy2(existing, backup_dir / (existing.name + "." + stamp + ".bak"))
     with zipfile.ZipFile(existing, "r") as z:
         parts = {i.filename: z.read(i.filename) for i in z.infolist()}
-    target = next((n for n in sorted(parts) if re.fullmatch(r"xl/worksheets/sheet\d+\.xml", n)), None)
+    target = next((n for n in sorted(parts) if SHEET_PART.fullmatch(n)), None)
     if not target:
         return 0
     xml = parts[target].decode("utf-8")
+    targets = {
+        f"{_col_letters(j)}{i}": val
+        for i, row in enumerate(rows, 1)
+        for j, val in enumerate(row, 1)
+        if isinstance(val, (int, float)) and not isinstance(val, bool)
+    }
+    if not targets:
+        return 0
     changed = 0
-    for i, row in enumerate(rows, 1):
-        for j, val in enumerate(row, 1):
-            if not isinstance(val, (int, float)) or isinstance(val, bool):
-                continue
-            ref = f"{_col_letters(j)}{i}"
-            pattern = re.compile(r'(<c r="' + ref + r'"[^>]*>)(.*?)(</c>)', re.S)
-            m = pattern.search(xml)
-            if not m:
-                continue
-            inner = re.sub(r"<v>.*?</v>", f"<v>{val}</v>", m.group(2), flags=re.S)
-            if "<v>" not in inner:
-                inner += f"<v>{val}</v>"
-            xml = xml[:m.start()] + m.group(1) + inner + m.group(3) + xml[m.end():]
-            changed += 1
+
+    def repl(m: re.Match) -> str:
+        nonlocal changed
+        ref = m.group(1)
+        if ref not in targets:
+            return m.group(0)
+        val = targets[ref]
+        inner = VALUE.sub(f"<v>{val}</v>", m.group(3))
+        if "<v>" not in inner:
+            inner += f"<v>{val}</v>"
+        changed += 1
+        return f'<c r="{ref}"{m.group(2)}>{inner}</c>'
+
+    xml = CELL.sub(repl, xml)
     parts[target] = xml.encode("utf-8")
     _write_zip(existing, parts)
     return changed
